@@ -1,0 +1,267 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────
+# ConnectSphere – Local Development Docker Compose
+# Start everything:  docker-compose up -d
+# Stop everything:   docker-compose down
+# View logs:         docker-compose logs -f <service-name>
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────
+
+  mysql:
+    image: mysql:8.3
+    container_name: cs-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_CHARSET: utf8mb4
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: cs-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: cs-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI → http://localhost:15672 (guest/guest)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  elasticsearch:
+    image: elasticsearch:8.13.4
+    container_name: cs-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+
+  # ── Microservices ────────────────────────────────────────────────
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: cs-auth
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_auth_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  post-service:
+    build:
+      context: ./post-service
+      dockerfile: Dockerfile
+    container_name: cs-post
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_post_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_FOLLOW_SERVICE_URL: http://follow-service:8085
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+      - auth-service
+
+  comment-service:
+    build:
+      context: ./comment-service
+      dockerfile: Dockerfile
+    container_name: cs-comment
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_comment_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_POST_SERVICE_URL: http://post-service:8082
+    depends_on:
+      - mysql
+      - rabbitmq
+      - post-service
+
+  like-service:
+    build:
+      context: ./like-service
+      dockerfile: Dockerfile
+    container_name: cs-like
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_like_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_POST_SERVICE_URL: http://post-service:8082
+      APP_SERVICES_COMMENT_SERVICE_URL: http://comment-service:8083
+    depends_on:
+      - mysql
+      - rabbitmq
+      - post-service
+
+  follow-service:
+    build:
+      context: ./follow-service
+      dockerfile: Dockerfile
+    container_name: cs-follow
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_follow_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: cs-notification
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_notification_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+
+  media-service:
+    build:
+      context: ./media-service
+      dockerfile: Dockerfile
+    container_name: cs-media
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_media_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - mysql
+      - rabbitmq
+
+  search-service:
+    build:
+      context: ./search-service
+      dockerfile: Dockerfile
+    container_name: cs-search
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_search_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      - mysql
+      - elasticsearch
+      - rabbitmq
+
+  connectsphere-web:
+    build:
+      context: ./connectsphere-web
+      dockerfile: Dockerfile
+    container_name: cs-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      APP_SERVICES_AUTH_URL: http://auth-service:8081
+      APP_SERVICES_POST_URL: http://post-service:8082
+      APP_SERVICES_COMMENT_URL: http://comment-service:8083
+      APP_SERVICES_LIKE_URL: http://like-service:8084
+      APP_SERVICES_FOLLOW_URL: http://follow-service:8085
+      APP_SERVICES_NOTIFICATION_URL: http://notification-service:8086
+      APP_SERVICES_MEDIA_URL: http://media-service:8087
+      APP_SERVICES_SEARCH_URL: http://search-service:8088
+    depends_on:
+      - auth-service
+      - post-service
+      - comment-service
+      - like-service
+      - follow-service
+      - notification-service
+      - media-service
+      - search-service
+
+volumes:
+  mysql-data:
+  es-data:
