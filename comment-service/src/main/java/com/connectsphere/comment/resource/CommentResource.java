@@ -29,6 +29,11 @@ public class CommentResource {
         this.commentService = commentService;
     }
 
+    @GetMapping("/{commentId}")
+    public ResponseEntity<CommentResponse> getCommentById(@PathVariable Long commentId) {
+        return ResponseEntity.ok(commentService.getCommentById(commentId));
+    }
+
     @PostMapping
     public ResponseEntity<CommentResponse> addComment(
             @RequestHeader(name = "Authorization", required = false) String authorization,

@@ -7,6 +7,8 @@ import java.util.List;
 
 public interface CommentService {
 
+    CommentResponse getCommentById(Long commentId);
+
     CommentResponse addComment(String authorizationHeader, AddCommentRequest request);
 
     List<CommentResponse> getCommentsByPost(Long postId);

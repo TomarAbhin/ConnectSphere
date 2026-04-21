@@ -43,6 +43,12 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public CommentResponse getCommentById(Long commentId) {
+        return toResponse(getActiveComment(commentId));
+    }
+
+    @Override
     public CommentResponse addComment(String authorizationHeader, AddCommentRequest request) {
         Long authorId = resolveCurrentUserId(authorizationHeader);
         ensurePostExists(authorizationHeader, request.postId());
