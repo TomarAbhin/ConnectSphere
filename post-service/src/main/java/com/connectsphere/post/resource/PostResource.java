@@ -102,6 +102,11 @@ public class PostResource {
         return ResponseEntity.ok(postService.incrementComments(postId));
     }
 
+    @DeleteMapping("/{postId}/comments")
+    public ResponseEntity<PostResponse> decrementComments(@PathVariable Long postId) {
+        return ResponseEntity.ok(postService.decrementComments(postId));
+    }
+
     @PutMapping("/{postId}/visibility")
     public ResponseEntity<PostResponse> changeVisibility(
             @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,

@@ -185,6 +185,13 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    public PostResponse decrementComments(Long postId) {
+        Post post = getActivePost(postId);
+        post.setCommentsCount(Math.max(0, post.getCommentsCount() - 1));
+        return toResponse(postRepository.save(post));
+    }
+
+    @Override
     public PostResponse changeVisibility(String authorizationHeader, Long postId, PostVisibility visibility) {
         Post post = getOwnedPost(authorizationHeader, postId);
         post.setVisibility(visibility);
