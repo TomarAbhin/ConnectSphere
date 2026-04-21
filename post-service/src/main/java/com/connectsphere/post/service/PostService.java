@@ -28,6 +28,8 @@ public interface PostService {
 
     PostResponse incrementComments(Long postId);
 
+    PostResponse decrementComments(Long postId);
+
     PostResponse changeVisibility(String authorizationHeader, Long postId, PostVisibility visibility);
 
     long getPostCount();
