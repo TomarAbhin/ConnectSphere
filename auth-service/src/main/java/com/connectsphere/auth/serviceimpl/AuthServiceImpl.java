@@ -150,6 +150,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public UserResponse getUserById(Long userId) {
+        return toUserResponse(userRepository.findById(userId)
+                .filter(User::isActive)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active user not found")));
+    }
+
+    @Override
     public UserResponse updateProfile(String email, UpdateProfileRequest request) {
         User user = getActiveUserByEmail(email);
 

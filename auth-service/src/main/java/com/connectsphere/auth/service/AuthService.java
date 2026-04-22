@@ -24,6 +24,8 @@ public interface AuthService {
 
     UserResponse getUserByEmail(String email);
 
+    UserResponse getUserById(Long userId);
+
     UserResponse updateProfile(String email, UpdateProfileRequest request);
 
     void changePassword(String email, ChangePasswordRequest request);

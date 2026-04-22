@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,6 +73,11 @@ public class AuthResource {
     @GetMapping("/profile")
     public ResponseEntity<UserResponse> profile(Principal principal) {
         return ResponseEntity.ok(authService.getUserByEmail(requiredPrincipalName(principal)));
+    }
+
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<UserResponse> userById(@PathVariable Long userId) {
+        return ResponseEntity.ok(authService.getUserById(userId));
     }
 
     @PutMapping("/profile")
