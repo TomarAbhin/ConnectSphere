@@ -41,7 +41,6 @@
         <module>notification-service</module>
         <module>media-service</module>
         <module>search-service</module>
-        <module>connectsphere-web</module>
     </modules>
 
     <!-- ─────────────────────────────────────────────
