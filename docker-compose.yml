@@ -234,6 +234,33 @@ services:
       - elasticsearch
       - rabbitmq
 
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./api-gateway/Dockerfile
+    container_name: cs-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      APP_SERVICES_AUTH_URL: http://auth-service:8081
+      APP_SERVICES_POST_URL: http://post-service:8082
+      APP_SERVICES_COMMENT_URL: http://comment-service:8083
+      APP_SERVICES_LIKE_URL: http://like-service:8084
+      APP_SERVICES_FOLLOW_URL: http://follow-service:8085
+      APP_SERVICES_NOTIFICATION_URL: http://notification-service:8086
+      APP_SERVICES_MEDIA_URL: http://media-service:8087
+      APP_SERVICES_SEARCH_URL: http://search-service:8088
+    depends_on:
+      - auth-service
+      - post-service
+      - comment-service
+      - like-service
+      - follow-service
+      - notification-service
+      - media-service
+      - search-service
+
 volumes:
   mysql-data:
   es-data:
