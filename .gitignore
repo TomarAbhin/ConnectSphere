@@ -12,6 +12,9 @@ target/
 *.project
 *.settings/
 
+# Node
+**/node_modules/
+
 # Env / Secrets
 **/application-prod.properties
 **/*.env
