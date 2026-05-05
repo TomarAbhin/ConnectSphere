@@ -34,6 +34,7 @@ public class LikeServiceImpl implements LikeService {
     private final String authServiceUrl;
     private final String postServiceUrl;
     private final String commentServiceUrl;
+    private final String notificationServiceUrl;
 
     public LikeServiceImpl(
             LikeRepository likeRepository,
@@ -41,12 +42,14 @@ public class LikeServiceImpl implements LikeService {
             @Value("${app.services.auth-service.url:http://localhost:8081}") String authServiceUrl,
             @Value("${app.services.post-service.url:http://localhost:8082}") String postServiceUrl,
             @Value("${app.services.comment-service.url:http://localhost:8083}") String commentServiceUrl
+            ,@Value("${app.services.notification-service.url:http://localhost:8086}") String notificationServiceUrl
     ) {
         this.likeRepository = likeRepository;
         this.restTemplate = restTemplate;
         this.authServiceUrl = authServiceUrl;
         this.postServiceUrl = postServiceUrl;
         this.commentServiceUrl = commentServiceUrl;
+        this.notificationServiceUrl = notificationServiceUrl;
     }
 
     @Override
@@ -70,6 +73,35 @@ public class LikeServiceImpl implements LikeService {
         like.setReactionType(request.reactionType());
         Like saved = likeRepository.save(like);
         incrementTargetReactionCount(authorizationHeader, request.targetType(), request.targetId(), request.reactionType());
+        // create notification for target owner
+        try {
+            Long recipientId = null;
+            if (request.targetType() == TargetType.POST) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> post = restTemplate.getForObject(postServiceUrl + "/posts/" + request.targetId(), java.util.Map.class);
+                if (post != null && post.get("authorId") != null) recipientId = ((Number) post.get("authorId")).longValue();
+            } else {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> comment = restTemplate.getForObject(commentServiceUrl + "/comments/" + request.targetId(), java.util.Map.class);
+                if (comment != null && comment.get("authorId") != null) recipientId = ((Number) comment.get("authorId")).longValue();
+            }
+            Long actorId = resolveCurrentUserId(authorizationHeader);
+            if (recipientId != null && !recipientId.equals(actorId)) {
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("recipientId", recipientId);
+                payload.put("actorId", actorId);
+                payload.put("actionType", "LIKE");
+                payload.put("targetType", request.targetType().name());
+                payload.put("targetId", request.targetId());
+                payload.put("message", "Someone liked your " + (request.targetType() == TargetType.POST ? "post" : "comment"));
+                payload.put("deepLink", request.targetType() == TargetType.POST ? ("/post/" + request.targetId()) : ("/post/" + request.targetId()));
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.set("Authorization", authorizationHeader);
+                org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(payload, headers);
+                restTemplate.postForObject(notificationServiceUrl + "/notifications", req, java.util.Map.class);
+            }
+        } catch (Exception ignored) {
+        }
         return toResponse(saved);
     }
 
@@ -190,6 +222,9 @@ public class LikeServiceImpl implements LikeService {
 
             if (profile == null || profile.userId() == null || !profile.active()) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
+            }
+            if (profile.role() != null && "GUEST".equalsIgnoreCase(profile.role())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Guest accounts have read-only access");
             }
             return profile.userId();
         } catch (RestClientException ex) {

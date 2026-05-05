@@ -57,6 +57,17 @@ public class MediaResource {
         try {
             return objectMapper.readValue(requestJson, UploadMediaRequest.class);
         } catch (Exception ex) {
+            // Attempt lenient parsing: accept simple values like "IMAGE" or {"mediaType":"IMAGE"}
+            try {
+                String up = requestJson == null ? "" : requestJson.toUpperCase();
+                if (up.contains("IMAGE")) {
+                    return new UploadMediaRequest(null, com.connectsphere.media.entity.MediaType.IMAGE);
+                }
+                if (up.contains("VIDEO")) {
+                    return new UploadMediaRequest(null, com.connectsphere.media.entity.MediaType.VIDEO);
+                }
+            } catch (Exception ignored) {
+            }
             throw new IllegalArgumentException("Invalid request JSON in multipart field 'request'", ex);
         }
     }

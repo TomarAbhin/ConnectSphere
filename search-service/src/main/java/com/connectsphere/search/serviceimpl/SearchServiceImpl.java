@@ -106,6 +106,23 @@ public class SearchServiceImpl implements SearchService {
     }
 
     @Override
+    public void indexPostForAdmin(String authorizationHeader, IndexPostRequest request) {
+        ensureAdmin(authorizationHeader);
+        indexPost(request);
+    }
+
+    @Override
+    public HashtagResponse upsertHashtagForAdmin(String authorizationHeader, String tag) {
+        ensureAdmin(authorizationHeader);
+        String normalizedTag = normalizeTag(tag);
+        if (normalizedTag.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tag is required");
+        }
+        Hashtag hashtag = upsertHashtag(normalizedTag);
+        return toHashtagResponse(hashtag);
+    }
+
+    @Override
     public void removePostIndex(Long postId) {
         if (postId == null) {
             return;
@@ -170,6 +187,51 @@ public class SearchServiceImpl implements SearchService {
 
         return posts.stream()
                 .filter(post -> canViewPost(post, requesterId))
+                .sorted(Comparator.comparing(IndexedPost::getCreatedAt).reversed())
+                .map(this::toPostResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PostSearchResponse> searchPostsForAdmin(String authorizationHeader, String query) {
+        ensureAdmin(authorizationHeader);
+        String safeQuery = query == null ? "" : query.trim();
+
+        List<IndexedPost> posts;
+        if (safeQuery.isBlank()) {
+            posts = searchRepository.findByDeletedFalseOrderByCreatedAtDesc();
+        } else {
+            Map<Long, IndexedPost> combined = new LinkedHashMap<>();
+            searchRepository.findByDeletedFalseAndContentContainingIgnoreCaseOrderByCreatedAtDesc(safeQuery)
+                    .forEach(post -> combined.putIfAbsent(post.getPostId(), post));
+
+            String normalizedTag = normalizeTag(safeQuery);
+            if (!normalizedTag.isBlank()) {
+                postHashtagRepository.findPostIdsByHashtag(normalizedTag)
+                        .stream()
+                        .distinct()
+                        .map(searchRepository::findByPostId)
+                        .flatMap(java.util.Optional::stream)
+                        .filter(post -> !post.isDeleted())
+                        .forEach(post -> combined.putIfAbsent(post.getPostId(), post));
+            }
+
+            hashtagRepository.findByTagContainingIgnoreCaseOrderByTagAsc(safeQuery)
+                    .stream()
+                    .map(Hashtag::getTag)
+                    .forEach(tag -> postHashtagRepository.findPostIdsByHashtag(tag)
+                            .stream()
+                            .distinct()
+                            .map(searchRepository::findByPostId)
+                            .flatMap(java.util.Optional::stream)
+                            .filter(post -> !post.isDeleted())
+                            .forEach(post -> combined.putIfAbsent(post.getPostId(), post)));
+
+            posts = new ArrayList<>(combined.values());
+        }
+
+        return posts.stream()
                 .sorted(Comparator.comparing(IndexedPost::getCreatedAt).reversed())
                 .map(this::toPostResponse)
                 .toList();
@@ -340,6 +402,34 @@ public class SearchServiceImpl implements SearchService {
             return profile.userId();
         } catch (RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
+        }
+    }
+
+    private void ensureAdmin(String authorizationHeader) {
+        Long requesterId = resolveRequesterId(authorizationHeader);
+        if (requesterId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin privileges are required");
+        }
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", authorizationHeader);
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            AuthProfileResponse profile = restTemplate.exchange(
+                    authServiceUrl + "/auth/profile",
+                    HttpMethod.GET,
+                    request,
+                    AuthProfileResponse.class
+            ).getBody();
+            if (profile == null || profile.userId() == null || !requesterId.equals(profile.userId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin privileges are required");
+            }
+            if (profile.role() == null || !"ADMIN".equalsIgnoreCase(profile.role())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin privileges are required");
+            }
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin privileges are required");
         }
     }
 

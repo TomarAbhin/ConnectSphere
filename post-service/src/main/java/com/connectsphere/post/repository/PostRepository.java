@@ -13,6 +13,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     Optional<Post> findByPostIdAndIsDeletedFalse(Long postId);
 
+    List<Post> findByAuthorId(Long authorId);
+
     List<Post> findByAuthorIdAndIsDeletedFalseOrderByCreatedAtDesc(Long authorId);
 
     List<Post> findByVisibilityAndIsDeletedFalseOrderByCreatedAtDesc(PostVisibility visibility);
@@ -34,6 +36,12 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             ORDER BY p.createdAt DESC
             """)
     List<Post> searchByContent(@Param("query") String query);
+
+    @Query("""
+            SELECT p FROM Post p
+            WHERE p.authorUsername IS NULL OR p.authorUsername = ''
+            """)
+    List<Post> findWithMissingAuthorSnapshot();
 
     long countByIsDeletedFalse();
 }

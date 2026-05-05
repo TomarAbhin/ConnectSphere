@@ -22,6 +22,10 @@ public interface PostService {
 
     List<PostResponse> searchPosts(String authorizationHeader, String query);
 
+    void deletePostAsAdmin(String authorizationHeader, Long postId);
+
+    void deletePostsByAuthor(String authorizationHeader, Long authorId);
+
     PostResponse incrementLikes(Long postId);
 
     PostResponse decrementLikes(Long postId);
@@ -33,4 +37,10 @@ public interface PostService {
     PostResponse changeVisibility(String authorizationHeader, Long postId, PostVisibility visibility);
 
     long getPostCount();
+
+    /**
+     * Backfill author snapshot fields for posts where snapshot is missing.
+     * Accessible to admins only.
+     */
+    void backfillAuthorSnapshots(String authorizationHeader);
 }

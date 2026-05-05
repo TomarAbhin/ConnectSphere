@@ -8,6 +8,9 @@ import java.util.List;
 public record PostResponse(
         Long postId,
         Long authorId,
+        String authorUsername,
+        String authorFullName,
+        String authorProfilePicUrl,
         String content,
         List<String> mediaUrls,
         PostType postType,

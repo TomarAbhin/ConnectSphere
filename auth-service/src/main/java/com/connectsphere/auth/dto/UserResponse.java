@@ -14,6 +14,7 @@ public record UserResponse(
         UserRole role,
         AuthProvider provider,
         boolean active,
-        Instant createdAt
+        Instant createdAt,
+        Instant lastLoginAt
 ) {
 }

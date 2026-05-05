@@ -29,17 +29,20 @@ public class CommentServiceImpl implements CommentService {
     private final RestTemplate restTemplate;
     private final String authServiceUrl;
     private final String postServiceUrl;
+    private final String notificationServiceUrl;
 
     public CommentServiceImpl(
             CommentRepository commentRepository,
             RestTemplate restTemplate,
             @Value("${app.services.auth-service.url:http://localhost:8081}") String authServiceUrl,
             @Value("${app.services.post-service.url:http://localhost:8082}") String postServiceUrl
+            ,@Value("${app.services.notification-service.url:http://localhost:8086}") String notificationServiceUrl
     ) {
         this.commentRepository = commentRepository;
         this.restTemplate = restTemplate;
         this.authServiceUrl = authServiceUrl;
         this.postServiceUrl = postServiceUrl;
+        this.notificationServiceUrl = notificationServiceUrl;
     }
 
     @Override
@@ -62,6 +65,36 @@ public class CommentServiceImpl implements CommentService {
 
         Comment saved = commentRepository.save(comment);
         incrementPostCommentCount(authorizationHeader, request.postId());
+        // send notification to post author or parent comment author
+        try {
+            Long recipientId = null;
+            String type = "COMMENT";
+            if (request.parentCommentId() != null) {
+                var parentOpt = commentRepository.findByCommentId(request.parentCommentId());
+                if (parentOpt.isPresent()) recipientId = parentOpt.get().getAuthorId();
+                type = "REPLY";
+            } else {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> post = restTemplate.getForObject(postServiceUrl + "/posts/" + request.postId(), java.util.Map.class);
+                if (post != null && post.get("authorId") != null) recipientId = ((Number) post.get("authorId")).longValue();
+            }
+            Long actorId = resolveCurrentUserId(authorizationHeader);
+            if (recipientId != null && !recipientId.equals(actorId)) {
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("recipientId", recipientId);
+                payload.put("actorId", actorId);
+                payload.put("actionType", type);
+                payload.put("targetType", request.parentCommentId() != null ? "COMMENT" : "POST");
+                payload.put("targetId", request.parentCommentId() != null ? request.parentCommentId() : request.postId());
+                payload.put("message", type.equals("REPLY") ? "Someone replied to your comment" : "Someone commented on your post");
+                payload.put("deepLink", "/post/" + request.postId());
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.set("Authorization", authorizationHeader);
+                org.springframework.http.HttpEntity<java.util.Map<String, Object>> reqEntity = new org.springframework.http.HttpEntity<>(payload, headers);
+                restTemplate.postForObject(notificationServiceUrl + "/notifications", reqEntity, java.util.Map.class);
+            }
+        } catch (Exception ignored) {
+        }
         return toResponse(saved);
     }
 
@@ -112,14 +145,16 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    public CommentResponse likeComment(Long commentId) {
+    public CommentResponse likeComment(String authorizationHeader, Long commentId) {
+        ensureWritableUser(authorizationHeader);
         Comment comment = getActiveComment(commentId);
         comment.setLikesCount(comment.getLikesCount() + 1);
         return toResponse(commentRepository.save(comment));
     }
 
     @Override
-    public CommentResponse unlikeComment(Long commentId) {
+    public CommentResponse unlikeComment(String authorizationHeader, Long commentId) {
+        ensureWritableUser(authorizationHeader);
         Comment comment = getActiveComment(commentId);
         comment.setLikesCount(Math.max(0, comment.getLikesCount() - 1));
         return toResponse(commentRepository.save(comment));
@@ -138,8 +173,8 @@ public class CommentServiceImpl implements CommentService {
 
     private Comment getOwnedComment(String authorizationHeader, Long commentId) {
         Comment comment = getActiveComment(commentId);
-        Long requesterId = resolveCurrentUserId(authorizationHeader);
-        if (!Objects.equals(comment.getAuthorId(), requesterId)) {
+        AuthProfileResponse profile = resolveCurrentProfile(authorizationHeader);
+        if (!Objects.equals(comment.getAuthorId(), profile.userId()) && !isAdmin(profile)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only modify your own comment");
         }
         return comment;
@@ -188,10 +223,47 @@ public class CommentServiceImpl implements CommentService {
             if (profile == null || profile.userId() == null || !profile.active()) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
             }
+            if (profile.role() != null && "GUEST".equalsIgnoreCase(profile.role())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Guest accounts have read-only access");
+            }
             return profile.userId();
         } catch (RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
         }
+    }
+
+    private void ensureWritableUser(String authorizationHeader) {
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication is required");
+        }
+        AuthProfileResponse profile = resolveCurrentProfile(authorizationHeader);
+        if (profile.role() != null && "GUEST".equalsIgnoreCase(profile.role())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Guest accounts have read-only access");
+        }
+    }
+
+    private AuthProfileResponse resolveCurrentProfile(String authorizationHeader) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", authorizationHeader);
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            AuthProfileResponse profile = restTemplate.exchange(
+                    authServiceUrl + "/auth/profile",
+                    HttpMethod.GET,
+                    request,
+                    AuthProfileResponse.class
+            ).getBody();
+            if (profile == null || profile.userId() == null || !profile.active()) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
+            }
+            return profile;
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
+        }
+    }
+
+    private boolean isAdmin(AuthProfileResponse profile) {
+        return profile != null && profile.role() != null && "ADMIN".equalsIgnoreCase(profile.role());
     }
 
     private void incrementPostCommentCount(String authorizationHeader, Long postId) {

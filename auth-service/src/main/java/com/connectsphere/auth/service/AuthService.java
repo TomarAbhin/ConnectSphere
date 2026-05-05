@@ -5,6 +5,7 @@ import com.connectsphere.auth.dto.ChangePasswordRequest;
 import com.connectsphere.auth.dto.LoginRequest;
 import com.connectsphere.auth.dto.RegisterRequest;
 import com.connectsphere.auth.dto.UpdateProfileRequest;
+import com.connectsphere.auth.dto.PlatformAnalyticsResponse;
 import com.connectsphere.auth.dto.UserResponse;
 import com.connectsphere.auth.dto.UserSearchResponse;
 import com.connectsphere.auth.entity.UserRole;
@@ -32,5 +33,15 @@ public interface AuthService {
 
     List<UserSearchResponse> searchUsers(String query, UserRole role);
 
-    void deactivateAccount(String email);
+    List<UserResponse> searchAllUsers(String authorizationHeader, String query, UserRole role);
+
+    void suspendUserById(String authorizationHeader, Long userId);
+
+    void reactivateUserById(String authorizationHeader, Long userId);
+
+    void deactivateAccount(String authorizationHeader, String email);
+
+    void deactivateUserById(String authorizationHeader, Long userId);
+
+    PlatformAnalyticsResponse getPlatformAnalytics(String authorizationHeader);
 }

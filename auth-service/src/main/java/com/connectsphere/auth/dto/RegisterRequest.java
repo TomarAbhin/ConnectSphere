@@ -1,5 +1,6 @@
 package com.connectsphere.auth.dto;
 
+import com.connectsphere.auth.entity.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -18,6 +19,10 @@ public record RegisterRequest(
         String password,
 
         @Size(max = 120, message = "Full name must be up to 120 characters")
-        String fullName
+        String fullName,
+
+        UserRole role,
+
+        String adminSecretKey
 ) {
 }

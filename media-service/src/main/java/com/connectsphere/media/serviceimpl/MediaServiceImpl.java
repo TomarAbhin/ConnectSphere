@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -54,7 +55,7 @@ public class MediaServiceImpl implements MediaService {
             MediaRepository mediaRepository,
             StoryRepository storyRepository,
             RestTemplate restTemplate,
-            RabbitTemplate rabbitTemplate,
+            ObjectProvider<RabbitTemplate> rabbitTemplateProvider,
             @Value("${app.services.auth-service.url:http://localhost:8081}") String authServiceUrl,
             @Value("${app.media.upload-dir:uploads/media}") String uploadDir,
             @Value("${app.rabbitmq.exchange}") String rabbitExchange,
@@ -63,7 +64,7 @@ public class MediaServiceImpl implements MediaService {
         this.mediaRepository = mediaRepository;
         this.storyRepository = storyRepository;
         this.restTemplate = restTemplate;
-        this.rabbitTemplate = rabbitTemplate;
+        this.rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
         this.authServiceUrl = authServiceUrl;
         this.rabbitExchange = rabbitExchange;
         this.storyExpiredRoutingKey = storyExpiredRoutingKey;
@@ -202,6 +203,9 @@ public class MediaServiceImpl implements MediaService {
 
     @Override
     public void publishExpiredStoryEvent(StoryExpiredEvent event) {
+        if (rabbitTemplate == null) {
+            return;
+        }
         try {
             rabbitTemplate.convertAndSend(rabbitExchange, storyExpiredRoutingKey, event);
         } catch (Exception ignored) {
@@ -265,6 +269,9 @@ public class MediaServiceImpl implements MediaService {
             ).getBody();
             if (profile == null || profile.userId() == null || !profile.active()) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
+            }
+            if (profile.role() != null && "GUEST".equalsIgnoreCase(profile.role())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Guest accounts have read-only access");
             }
             return profile;
         } catch (RestClientException ex) {

@@ -11,9 +11,15 @@ public interface SearchService {
 
     void indexPost(IndexPostRequest request);
 
+    void indexPostForAdmin(String authorizationHeader, IndexPostRequest request);
+
+    HashtagResponse upsertHashtagForAdmin(String authorizationHeader, String tag);
+
     void removePostIndex(Long postId);
 
     List<PostSearchResponse> searchPosts(String authorizationHeader, String query);
+
+    List<PostSearchResponse> searchPostsForAdmin(String authorizationHeader, String query);
 
     List<UserSearchResponse> searchUsers(String authorizationHeader, String query, UserRole role);
 

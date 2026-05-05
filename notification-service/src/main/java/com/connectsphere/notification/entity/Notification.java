@@ -46,6 +46,9 @@ public class Notification {
     @Column(nullable = false, length = 1000)
     private String message;
 
+    @Column(length = 1024)
+    private String deepLink;
+
     @Column(nullable = false, name = "is_read")
     private boolean read = false;
 

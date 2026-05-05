@@ -18,5 +18,7 @@ public record CreateNotificationRequest(
         @NotBlank(message = "Message is required")
         @Size(max = 1000, message = "Message must be up to 1000 characters")
         String message
+        ,
+        String deepLink
 ) {
 }

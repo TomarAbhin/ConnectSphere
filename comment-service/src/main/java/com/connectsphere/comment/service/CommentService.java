@@ -21,9 +21,9 @@ public interface CommentService {
 
     void deleteComment(String authorizationHeader, Long commentId);
 
-    CommentResponse likeComment(Long commentId);
+    CommentResponse likeComment(String authorizationHeader, Long commentId);
 
-    CommentResponse unlikeComment(Long commentId);
+    CommentResponse unlikeComment(String authorizationHeader, Long commentId);
 
     long getCommentCount(Long postId);
 }

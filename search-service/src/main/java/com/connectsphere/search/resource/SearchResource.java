@@ -3,6 +3,7 @@ package com.connectsphere.search.resource;
 import com.connectsphere.search.dto.HashtagResponse;
 import com.connectsphere.search.dto.IndexPostRequest;
 import com.connectsphere.search.dto.PostSearchResponse;
+import com.connectsphere.search.dto.UpsertHashtagRequest;
 import com.connectsphere.search.dto.UserRole;
 import com.connectsphere.search.dto.UserSearchResponse;
 import com.connectsphere.search.service.SearchService;
@@ -36,6 +37,23 @@ public class SearchResource {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
+    @PostMapping("/admin/index")
+    public ResponseEntity<Void> indexPostForAdmin(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @Valid @RequestBody IndexPostRequest request
+    ) {
+        searchService.indexPostForAdmin(authorization, request);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @PostMapping("/admin/hashtags")
+    public ResponseEntity<HashtagResponse> upsertHashtagForAdmin(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @Valid @RequestBody UpsertHashtagRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(searchService.upsertHashtagForAdmin(authorization, request.tag()));
+    }
+
     @DeleteMapping("/index/{postId}")
     public ResponseEntity<Void> removePostIndex(@PathVariable Long postId) {
         searchService.removePostIndex(postId);
@@ -48,6 +66,14 @@ public class SearchResource {
             @RequestParam(name = "query", defaultValue = "") String query
     ) {
         return ResponseEntity.ok(searchService.searchPosts(authorization, query));
+    }
+
+    @GetMapping("/admin/posts")
+    public ResponseEntity<List<PostSearchResponse>> searchPostsForAdmin(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam(name = "query", defaultValue = "") String query
+    ) {
+        return ResponseEntity.ok(searchService.searchPostsForAdmin(authorization, query));
     }
 
     @GetMapping("/users")

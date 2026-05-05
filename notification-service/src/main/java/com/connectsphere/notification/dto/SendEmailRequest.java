@@ -13,5 +13,8 @@ public record SendEmailRequest(
         @NotBlank(message = "Body is required")
         @Size(max = 5000, message = "Body must be up to 5000 characters")
         String body
+        ,
+        @Size(max = 500, message = "Deep link must be up to 500 characters")
+        String deepLink
 ) {
 }

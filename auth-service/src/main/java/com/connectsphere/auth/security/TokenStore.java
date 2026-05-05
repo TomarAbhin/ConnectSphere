@@ -53,6 +53,13 @@ public class TokenStore {
         refreshTokens.remove(refreshToken);
     }
 
+    public void revokeRefreshTokensForEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+        refreshTokens.entrySet().removeIf(entry -> email.equalsIgnoreCase(entry.getValue().email()));
+    }
+
     @Scheduled(fixedDelay = 60000)
     public void cleanupExpiredLocalTokens() {
         Instant now = Instant.now();

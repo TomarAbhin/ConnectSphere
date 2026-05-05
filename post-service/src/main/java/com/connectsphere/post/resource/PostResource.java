@@ -79,6 +79,24 @@ public class PostResource {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping("/admin/{postId}")
+    public ResponseEntity<Void> deletePostAsAdmin(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long postId
+    ) {
+        postService.deletePostAsAdmin(authorization, postId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/admin/author/{authorId}")
+    public ResponseEntity<Void> deletePostsByAuthor(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long authorId
+    ) {
+        postService.deletePostsByAuthor(authorization, authorId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/search")
     public ResponseEntity<List<PostResponse>> searchPosts(
             @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,
@@ -119,5 +137,13 @@ public class PostResource {
     @GetMapping("/count")
     public ResponseEntity<PostCountResponse> getPostCount() {
         return ResponseEntity.ok(new PostCountResponse(postService.getPostCount()));
+    }
+
+    @PostMapping("/admin/backfill-author-snapshots")
+    public ResponseEntity<Void> backfillAuthorSnapshots(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        postService.backfillAuthorSnapshots(authorization);
+        return ResponseEntity.noContent().build();
     }
 }

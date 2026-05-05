@@ -15,6 +15,7 @@ public record NotificationResponse(
         boolean read,
         Instant readAt,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String deepLink
 ) {
 }

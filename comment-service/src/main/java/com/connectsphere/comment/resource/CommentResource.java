@@ -76,13 +76,19 @@ public class CommentResource {
     }
 
     @PostMapping("/{commentId}/likes")
-    public ResponseEntity<CommentResponse> likeComment(@PathVariable Long commentId) {
-        return ResponseEntity.ok(commentService.likeComment(commentId));
+    public ResponseEntity<CommentResponse> likeComment(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long commentId
+    ) {
+        return ResponseEntity.ok(commentService.likeComment(authorization, commentId));
     }
 
     @DeleteMapping("/{commentId}/likes")
-    public ResponseEntity<CommentResponse> unlikeComment(@PathVariable Long commentId) {
-        return ResponseEntity.ok(commentService.unlikeComment(commentId));
+    public ResponseEntity<CommentResponse> unlikeComment(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long commentId
+    ) {
+        return ResponseEntity.ok(commentService.unlikeComment(authorization, commentId));
     }
 
     @GetMapping("/post/{postId}/count")

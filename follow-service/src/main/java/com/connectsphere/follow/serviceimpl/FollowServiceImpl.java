@@ -42,15 +42,18 @@ public class FollowServiceImpl implements FollowService {
     private final FollowRepository followRepository;
     private final RestTemplate restTemplate;
     private final String authServiceUrl;
+    private final String notificationServiceUrl;
 
     public FollowServiceImpl(
             FollowRepository followRepository,
             RestTemplate restTemplate,
             @Value("${app.services.auth-service.url:http://localhost:8081}") String authServiceUrl
+            ,@Value("${app.services.notification-service.url:http://localhost:8086}") String notificationServiceUrl
     ) {
         this.followRepository = followRepository;
         this.restTemplate = restTemplate;
         this.authServiceUrl = authServiceUrl;
+        this.notificationServiceUrl = notificationServiceUrl;
     }
 
     @Override
@@ -70,7 +73,24 @@ public class FollowServiceImpl implements FollowService {
         follow.setFollowerId(followerId);
         follow.setFollowedId(followedId);
         follow.setStatus(FollowStatus.ACTIVE);
-        return toResponse(followRepository.save(follow));
+        Follow saved = followRepository.save(follow);
+        // notify followed user
+        try {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("recipientId", followedId);
+            payload.put("actorId", followerId);
+            payload.put("actionType", "FOLLOW");
+            payload.put("targetType", "USER");
+            payload.put("targetId", followedId);
+            payload.put("message", "You have a new follower");
+            payload.put("deepLink", "/profile/" + followerId);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("Authorization", authorizationHeader);
+            org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(payload, headers);
+            restTemplate.postForObject(notificationServiceUrl + "/notifications", req, java.util.Map.class);
+        } catch (Exception ignored) {
+        }
+        return toResponse(saved);
     }
 
     @Override
@@ -221,6 +241,9 @@ public class FollowServiceImpl implements FollowService {
             AuthProfileResponse profile = fetchProfile(authorizationHeader);
             if (profile == null || profile.userId() == null || !profile.active()) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
+            }
+            if (profile.role() != null && "GUEST".equalsIgnoreCase(profile.role())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Guest accounts have read-only access");
             }
             return profile.userId();
         } catch (RestClientException ex) {

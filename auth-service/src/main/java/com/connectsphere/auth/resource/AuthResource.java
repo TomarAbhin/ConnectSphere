@@ -6,6 +6,7 @@ import com.connectsphere.auth.dto.LoginRequest;
 import com.connectsphere.auth.dto.MessageResponse;
 import com.connectsphere.auth.dto.RefreshTokenRequest;
 import com.connectsphere.auth.dto.RegisterRequest;
+import com.connectsphere.auth.dto.PlatformAnalyticsResponse;
 import com.connectsphere.auth.dto.UpdateProfileRequest;
 import com.connectsphere.auth.dto.UserResponse;
 import com.connectsphere.auth.dto.UserSearchResponse;
@@ -18,6 +19,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -105,14 +107,66 @@ public class AuthResource {
         return ResponseEntity.ok(authService.searchUsers(query, role));
     }
 
+    @GetMapping("/admin/users")
+    public ResponseEntity<List<UserResponse>> searchAllUsers(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam(name = "query", defaultValue = "") String query,
+            @RequestParam(name = "role", required = false) UserRole role
+    ) {
+        return ResponseEntity.ok(authService.searchAllUsers(authorization, query, role));
+    }
+
+    @PutMapping("/admin/users/{userId}/suspend")
+    public ResponseEntity<MessageResponse> suspendUserById(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long userId
+    ) {
+        authService.suspendUserById(authorization, userId);
+        return ResponseEntity.ok(new MessageResponse("User suspended successfully"));
+    }
+
+    @PutMapping("/admin/users/{userId}/reactivate")
+    public ResponseEntity<MessageResponse> reactivateUserById(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long userId
+    ) {
+        authService.reactivateUserById(authorization, userId);
+        return ResponseEntity.ok(new MessageResponse("User reactivated successfully"));
+    }
+
+    @GetMapping("/admin/analytics")
+    public ResponseEntity<PlatformAnalyticsResponse> analytics(
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ResponseEntity.ok(authService.getPlatformAnalytics(authorization));
+    }
+
     @PutMapping("/deactivate")
     public ResponseEntity<MessageResponse> deactivate(
             Principal principal,
             @RequestHeader(name = "Authorization", required = false) String authorization
     ) {
-        authService.deactivateAccount(requiredPrincipalName(principal));
+        authService.deactivateAccount(authorization, requiredPrincipalName(principal));
         authService.logout(extractBearerToken(authorization));
-        return ResponseEntity.ok(new MessageResponse("Account deactivated successfully"));
+        return ResponseEntity.ok(new MessageResponse("Account deleted successfully"));
+    }
+
+    @PutMapping("/admin/users/{userId}/deactivate")
+    public ResponseEntity<MessageResponse> deactivateUserById(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long userId
+    ) {
+        authService.deactivateUserById(authorization, userId);
+        return ResponseEntity.ok(new MessageResponse("User deleted successfully"));
+    }
+
+    @DeleteMapping("/admin/users/{userId}")
+    public ResponseEntity<MessageResponse> deleteUserById(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long userId
+    ) {
+        authService.deactivateUserById(authorization, userId);
+        return ResponseEntity.ok(new MessageResponse("User deleted successfully"));
     }
 
     private String extractBearerToken(String authHeader) {

@@ -64,6 +64,7 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setTargetType(request.targetType());
         notification.setTargetId(request.targetId());
         notification.setMessage(request.message().trim());
+        notification.setDeepLink(request.deepLink());
         return toResponse(notificationRepository.save(notification));
     }
 
@@ -93,14 +94,19 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public NotificationResponse sendEmailAlert(String authorizationHeader, SendEmailRequest request) {
-        ensureAdmin(authorizationHeader);
         UserResponse recipient = fetchUserById(authorizationHeader, request.recipientId());
+        var sender = resolveCurrentProfile(authorizationHeader);
+        // allow user to send email to themselves or admins to send to anyone
+        if (!Objects.equals(sender.userId(), recipient.userId()) && !isAdmin(sender)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not allowed to send email to this user");
+        }
         Notification notification = new Notification();
         notification.setRecipientId(recipient.userId());
-        notification.setActorId(resolveCurrentProfile(authorizationHeader).userId());
+        notification.setActorId(sender.userId());
         notification.setActionType(NotificationType.SYSTEM);
         notification.setTargetType(NotificationTargetType.SYSTEM);
         notification.setMessage(request.body().trim());
+        notification.setDeepLink(request.deepLink());
         Notification saved = notificationRepository.save(notification);
         sendEmailToUser(recipient.email(), request.subject().trim(), request.body().trim());
         return toResponse(saved);
@@ -279,6 +285,7 @@ public class NotificationServiceImpl implements NotificationService {
                 notification.getReadAt(),
                 notification.getCreatedAt(),
                 notification.getUpdatedAt()
+                , notification.getDeepLink()
         );
     }
 }

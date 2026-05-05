@@ -61,6 +61,9 @@ public class User {
     @Column(nullable = false, name = "is_active")
     private boolean active = true;
 
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
