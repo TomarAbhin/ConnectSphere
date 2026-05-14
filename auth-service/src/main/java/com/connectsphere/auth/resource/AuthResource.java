@@ -77,7 +77,7 @@ public class AuthResource {
         return ResponseEntity.ok(authService.getUserByEmail(requiredPrincipalName(principal)));
     }
 
-    @GetMapping("/users/{userId}")
+    @GetMapping({"/users/{userId}", "/user/{userId}"})
     public ResponseEntity<UserResponse> userById(@PathVariable Long userId) {
         return ResponseEntity.ok(authService.getUserById(userId));
     }

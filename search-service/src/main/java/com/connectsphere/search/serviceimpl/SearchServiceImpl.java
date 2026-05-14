@@ -399,7 +399,17 @@ public class SearchServiceImpl implements SearchService {
             if (profile == null || profile.userId() == null) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
             }
+            if (profile.role() != null && "GUEST".equalsIgnoreCase(profile.role())) {
+                return null;
+            }
             return profile.userId();
+        } catch (ResponseStatusException ex) {
+            if (ex.getStatusCode() == HttpStatus.FORBIDDEN
+                    && ex.getReason() != null
+                    && ex.getReason().toLowerCase(java.util.Locale.ROOT).contains("guest accounts have read-only access")) {
+                return null;
+            }
+            throw ex;
         } catch (RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve authenticated user");
         }

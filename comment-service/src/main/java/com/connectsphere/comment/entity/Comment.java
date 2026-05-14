@@ -30,6 +30,15 @@ public class Comment {
     @Column(nullable = false)
     private Long authorId;
 
+    @Column(length = 100)
+    private String authorUsername;
+
+    @Column(length = 200)
+    private String authorFullName;
+
+    @Column(length = 1000)
+    private String authorProfilePicUrl;
+
     @Column
     private Long parentCommentId;
 

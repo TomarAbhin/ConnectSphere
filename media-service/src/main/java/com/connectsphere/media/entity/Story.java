@@ -50,6 +50,18 @@ public class Story {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(length = 100)
+    private String authorUsername;
+
+    @Column(length = 200)
+    private String authorFullName;
+
+    @Column(length = 1000)
+    private String authorProfilePicUrl;
+
+    @Column(nullable = false)
+    private long likesCount;
+
     @PrePersist
     public void onCreate() {
         Instant now = Instant.now();

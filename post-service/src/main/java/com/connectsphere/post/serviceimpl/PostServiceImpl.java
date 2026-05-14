@@ -11,10 +11,12 @@ import com.connectsphere.post.repository.PostRepository;
 import com.connectsphere.post.service.PostService;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -179,8 +181,9 @@ public class PostServiceImpl implements PostService {
     @Transactional
     public List<PostResponse> getFeedForUser(String authorizationHeader) {
         Long requesterId = resolveCurrentUserIdOrNull(authorizationHeader);
+        List<Post> publicPosts = postRepository.findByVisibilityAndIsDeletedFalseOrderByCreatedAtDesc(PostVisibility.PUBLIC);
         if (requesterId == null) {
-            return postRepository.findByVisibilityAndIsDeletedFalseOrderByCreatedAtDesc(PostVisibility.PUBLIC)
+            return publicPosts
                     .stream()
                     .map(this::refreshAuthorSnapshotOrDelete)
                     .filter(Objects::nonNull)
@@ -203,9 +206,7 @@ public class PostServiceImpl implements PostService {
                 List.of(PostVisibility.PUBLIC, PostVisibility.FOLLOWERS_ONLY, PostVisibility.PRIVATE)
         ));
 
-        if (feedPosts.isEmpty()) {
-            feedPosts.addAll(postRepository.findByVisibilityAndIsDeletedFalseOrderByCreatedAtDesc(PostVisibility.PUBLIC));
-        }
+        feedPosts.addAll(publicPosts);
 
         return feedPosts.stream()
                 .distinct()
@@ -233,6 +234,29 @@ public class PostServiceImpl implements PostService {
         }
 
         return toResponse(postRepository.save(post));
+    }
+
+    @Override
+    public PostResponse updatePostAsAdmin(String authorizationHeader, Long postId, UpdatePostRequest request) {
+        ensureAdmin(authorizationHeader);
+        Post post = getActivePost(postId);
+
+        if (request.content() != null) {
+            post.setContent(request.content().trim());
+        }
+        if (request.mediaUrls() != null) {
+            post.setMediaUrls(normalizeMediaUrls(request.mediaUrls()));
+            post.setPostType(request.postType() == null ? inferType(post.getMediaUrls()) : request.postType());
+        } else if (request.postType() != null) {
+            post.setPostType(request.postType());
+        }
+        if (request.visibility() != null) {
+            post.setVisibility(request.visibility());
+        }
+
+        Post saved = postRepository.save(post);
+        cleanupSearchIndex(saved.getPostId());
+        return toResponse(saved);
     }
 
     @Override
@@ -310,6 +334,22 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<PostResponse> searchPostsForAdmin(String authorizationHeader, String query) {
+        ensureAdmin(authorizationHeader);
+        String safeQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+
+        return postRepository.findAll().stream()
+                .filter(post -> !post.isDeleted())
+                .map(this::refreshAuthorSnapshotOrDelete)
+                .filter(Objects::nonNull)
+                .filter(post -> safeQuery.isBlank() || matchesAdminQuery(post, safeQuery))
+                .sorted(Comparator.comparing(Post::getCreatedAt).reversed())
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
     public PostResponse incrementLikes(Long postId) {
         Post post = getActivePost(postId);
         post.setLikesCount(post.getLikesCount() + 1);
@@ -382,6 +422,17 @@ public class PostServiceImpl implements PostService {
             return false;
         }
         return fetchFollowingIds(post.getAuthorId()).contains(requesterId);
+    }
+
+    private boolean matchesAdminQuery(Post post, String query) {
+        return containsIgnoreCase(post.getContent(), query)
+                || containsIgnoreCase(post.getAuthorUsername(), query)
+                || containsIgnoreCase(post.getAuthorFullName(), query)
+                || String.valueOf(post.getPostId()).contains(query);
+    }
+
+    private boolean containsIgnoreCase(String value, String query) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
     }
 
     private List<String> normalizeMediaUrls(List<String> mediaUrls) {
@@ -586,6 +637,11 @@ public class PostServiceImpl implements PostService {
             return resolveCurrentUserId(authorizationHeader);
         } catch (ResponseStatusException ex) {
             if (ex.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                return null;
+            }
+            if (ex.getStatusCode() == HttpStatus.FORBIDDEN
+                    && ex.getReason() != null
+                    && ex.getReason().toLowerCase(Locale.ROOT).contains("guest accounts have read-only access")) {
                 return null;
             }
             throw ex;

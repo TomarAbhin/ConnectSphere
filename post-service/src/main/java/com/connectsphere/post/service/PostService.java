@@ -18,9 +18,13 @@ public interface PostService {
 
     PostResponse updatePost(String authorizationHeader, Long postId, UpdatePostRequest request);
 
+    PostResponse updatePostAsAdmin(String authorizationHeader, Long postId, UpdatePostRequest request);
+
     void deletePost(String authorizationHeader, Long postId);
 
     List<PostResponse> searchPosts(String authorizationHeader, String query);
+
+    List<PostResponse> searchPostsForAdmin(String authorizationHeader, String query);
 
     void deletePostAsAdmin(String authorizationHeader, Long postId);
 

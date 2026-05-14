@@ -3,7 +3,6 @@ package com.connectsphere.notification.service;
 import com.connectsphere.notification.dto.BulkNotificationRequest;
 import com.connectsphere.notification.dto.CreateNotificationRequest;
 import com.connectsphere.notification.dto.NotificationResponse;
-import com.connectsphere.notification.dto.SendEmailRequest;
 import com.connectsphere.notification.dto.UnreadCountResponse;
 import java.util.List;
 
@@ -12,8 +11,6 @@ public interface NotificationService {
     NotificationResponse createNotification(String authorizationHeader, CreateNotificationRequest request);
 
     List<NotificationResponse> sendBulkNotification(String authorizationHeader, BulkNotificationRequest request);
-
-    NotificationResponse sendEmailAlert(String authorizationHeader, SendEmailRequest request);
 
     NotificationResponse getNotificationById(String authorizationHeader, Long notificationId);
 

@@ -34,6 +34,7 @@ public class LikeServiceImpl implements LikeService {
     private final String authServiceUrl;
     private final String postServiceUrl;
     private final String commentServiceUrl;
+    private final String mediaServiceUrl;
     private final String notificationServiceUrl;
 
     public LikeServiceImpl(
@@ -42,6 +43,7 @@ public class LikeServiceImpl implements LikeService {
             @Value("${app.services.auth-service.url:http://localhost:8081}") String authServiceUrl,
             @Value("${app.services.post-service.url:http://localhost:8082}") String postServiceUrl,
             @Value("${app.services.comment-service.url:http://localhost:8083}") String commentServiceUrl
+            ,@Value("${app.services.media-service.url:http://localhost:8087}") String mediaServiceUrl
             ,@Value("${app.services.notification-service.url:http://localhost:8086}") String notificationServiceUrl
     ) {
         this.likeRepository = likeRepository;
@@ -49,6 +51,7 @@ public class LikeServiceImpl implements LikeService {
         this.authServiceUrl = authServiceUrl;
         this.postServiceUrl = postServiceUrl;
         this.commentServiceUrl = commentServiceUrl;
+        this.mediaServiceUrl = mediaServiceUrl;
         this.notificationServiceUrl = notificationServiceUrl;
     }
 
@@ -80,10 +83,14 @@ public class LikeServiceImpl implements LikeService {
                 @SuppressWarnings("unchecked")
                 java.util.Map<String, Object> post = restTemplate.getForObject(postServiceUrl + "/posts/" + request.targetId(), java.util.Map.class);
                 if (post != null && post.get("authorId") != null) recipientId = ((Number) post.get("authorId")).longValue();
-            } else {
+            } else if (request.targetType() == TargetType.COMMENT) {
                 @SuppressWarnings("unchecked")
                 java.util.Map<String, Object> comment = restTemplate.getForObject(commentServiceUrl + "/comments/" + request.targetId(), java.util.Map.class);
                 if (comment != null && comment.get("authorId") != null) recipientId = ((Number) comment.get("authorId")).longValue();
+            } else {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> story = restTemplate.getForObject(mediaServiceUrl + "/stories/" + request.targetId(), java.util.Map.class);
+                if (story != null && story.get("authorId") != null) recipientId = ((Number) story.get("authorId")).longValue();
             }
             Long actorId = resolveCurrentUserId(authorizationHeader);
             if (recipientId != null && !recipientId.equals(actorId)) {
@@ -93,8 +100,16 @@ public class LikeServiceImpl implements LikeService {
                 payload.put("actionType", "LIKE");
                 payload.put("targetType", request.targetType().name());
                 payload.put("targetId", request.targetId());
-                payload.put("message", "Someone liked your " + (request.targetType() == TargetType.POST ? "post" : "comment"));
-                payload.put("deepLink", request.targetType() == TargetType.POST ? ("/post/" + request.targetId()) : ("/post/" + request.targetId()));
+                payload.put("message", switch (request.targetType()) {
+                    case POST -> "Someone liked your post";
+                    case COMMENT -> "Someone liked your comment";
+                    case STORY -> "Someone liked your story";
+                });
+                payload.put("deepLink", switch (request.targetType()) {
+                    case POST -> "/post/" + request.targetId();
+                    case COMMENT -> "/post/" + request.targetId();
+                    case STORY -> "/stories";
+                });
                 org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
                 headers.set("Authorization", authorizationHeader);
                 org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(payload, headers);
@@ -198,6 +213,7 @@ public class LikeServiceImpl implements LikeService {
             String url = switch (targetType) {
                 case POST -> postServiceUrl + "/posts/" + targetId;
                 case COMMENT -> commentServiceUrl + "/comments/" + targetId;
+                case STORY -> mediaServiceUrl + "/stories/" + targetId;
             };
             restTemplate.exchange(url, HttpMethod.GET, request, String.class);
         } catch (RestClientException ex) {
@@ -249,10 +265,14 @@ public class LikeServiceImpl implements LikeService {
                 String path = increment ? "/posts/" + targetId + "/likes" : "/posts/" + targetId + "/likes";
                 HttpMethod method = increment ? HttpMethod.POST : HttpMethod.DELETE;
                 restTemplate.exchange(postServiceUrl + path, method, request, String.class);
-            } else {
+            } else if (targetType == TargetType.COMMENT) {
                 String path = increment ? "/comments/" + targetId + "/likes" : "/comments/" + targetId + "/likes";
                 HttpMethod method = increment ? HttpMethod.POST : HttpMethod.DELETE;
                 restTemplate.exchange(commentServiceUrl + path, method, request, String.class);
+            } else {
+                String path = increment ? "/stories/" + targetId + "/likes" : "/stories/" + targetId + "/likes";
+                HttpMethod method = increment ? HttpMethod.POST : HttpMethod.DELETE;
+                restTemplate.exchange(mediaServiceUrl + path, method, request, String.class);
             }
         } catch (RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to update reaction count on target service");

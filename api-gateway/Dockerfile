@@ -8,7 +8,7 @@ RUN mvn -pl api-gateway -am -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-COPY --from=builder /app/target/api-gateway-*.jar app.jar
+COPY --from=builder /app/api-gateway/target/api-gateway-*.jar app.jar
 
 EXPOSE 8080
 

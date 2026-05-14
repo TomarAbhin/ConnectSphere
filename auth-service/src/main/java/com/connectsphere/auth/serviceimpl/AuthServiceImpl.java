@@ -41,7 +41,6 @@ public class AuthServiceImpl implements AuthService {
     private final String postServiceUrl;
     private final String searchServiceUrl;
     private final String adminRegistrationKey;
-    private final String notificationServiceUrl;
 
     public AuthServiceImpl(
             UserRepository userRepository,
@@ -50,8 +49,7 @@ public class AuthServiceImpl implements AuthService {
             TokenStore tokenStore,
                 @Value("${app.services.post.url:http://localhost:8082}") String postServiceUrl,
                 @Value("${app.services.search.url:http://localhost:8088}") String searchServiceUrl,
-                @Value("${app.security.admin-registration-key}") String adminRegistrationKey,
-                @Value("${app.services.notification-service.url:http://localhost:8086}") String notificationServiceUrl
+                @Value("${app.security.admin-registration-key}") String adminRegistrationKey
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -60,7 +58,6 @@ public class AuthServiceImpl implements AuthService {
         this.postServiceUrl = postServiceUrl;
         this.searchServiceUrl = searchServiceUrl;
         this.adminRegistrationKey = adminRegistrationKey == null ? "" : adminRegistrationKey.trim();
-        this.notificationServiceUrl = notificationServiceUrl;
     }
 
     @Override
@@ -176,8 +173,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long userId) {
         return toUserResponse(userRepository.findById(userId)
-                .filter(User::isActive)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active user not found")));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")));
     }
 
     @Override
@@ -240,25 +236,13 @@ public class AuthServiceImpl implements AuthService {
         ensureAdmin(authorizationHeader);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        ensureTargetUserIsNotAdmin(user);
         if (!user.isActive()) {
             return;
         }
         user.setActive(false);
         userRepository.save(user);
         tokenStore.revokeRefreshTokensForEmail(user.getEmail());
-        // notify user by email via notification service
-        try {
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
-            body.put("recipientId", user.getUserId());
-            body.put("subject", "Account suspended");
-            body.put("body", "Your account has been suspended by an administrator.");
-            body.put("deepLink", "/profile/" + user.getUserId());
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            if (authorizationHeader != null) headers.set("Authorization", authorizationHeader);
-            org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(body, headers);
-            new org.springframework.web.client.RestTemplate().postForObject(notificationServiceUrl + "/notifications/email", req, java.util.Map.class);
-        } catch (Exception ignored) {
-        }
     }
 
     @Override
@@ -266,23 +250,12 @@ public class AuthServiceImpl implements AuthService {
         ensureAdmin(authorizationHeader);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        ensureTargetUserIsNotAdmin(user);
         if (user.isActive()) {
             return;
         }
         user.setActive(true);
         userRepository.save(user);
-        try {
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
-            body.put("recipientId", user.getUserId());
-            body.put("subject", "Account reactivated");
-            body.put("body", "Your account has been reactivated by an administrator.");
-            body.put("deepLink", "/profile/" + user.getUserId());
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            if (authorizationHeader != null) headers.set("Authorization", authorizationHeader);
-            org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(body, headers);
-            new org.springframework.web.client.RestTemplate().postForObject(notificationServiceUrl + "/notifications/email", req, java.util.Map.class);
-        } catch (Exception ignored) {
-        }
     }
 
     @Override
@@ -291,18 +264,6 @@ public class AuthServiceImpl implements AuthService {
         removeUserContent(user.getUserId(), authorizationHeader);
         tokenStore.revokeRefreshTokensForEmail(user.getEmail());
         userRepository.delete(user);
-        try {
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
-            body.put("recipientId", user.getUserId());
-            body.put("subject", "Account removed");
-            body.put("body", "Your account has been removed.");
-            body.put("deepLink", "/");
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            if (authorizationHeader != null) headers.set("Authorization", authorizationHeader);
-            org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(body, headers);
-            new org.springframework.web.client.RestTemplate().postForObject(notificationServiceUrl + "/notifications/email", req, java.util.Map.class);
-        } catch (Exception ignored) {
-        }
     }
 
     @Override
@@ -313,21 +274,10 @@ public class AuthServiceImpl implements AuthService {
         ensureAdmin(authorizationHeader);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        ensureTargetUserIsNotAdmin(user);
         removeUserContent(userId, authorizationHeader);
         tokenStore.revokeRefreshTokensForEmail(user.getEmail());
         userRepository.delete(user);
-        try {
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
-            body.put("recipientId", user.getUserId());
-            body.put("subject", "Account deleted");
-            body.put("body", "Your account has been deleted by an administrator.");
-            body.put("deepLink", "/");
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            if (authorizationHeader != null) headers.set("Authorization", authorizationHeader);
-            org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(body, headers);
-            new org.springframework.web.client.RestTemplate().postForObject(notificationServiceUrl + "/notifications/email", req, java.util.Map.class);
-        } catch (Exception ignored) {
-        }
     }
 
     @Override
@@ -440,6 +390,12 @@ public class AuthServiceImpl implements AuthService {
     private void ensureWritableAccount(User user) {
         if (user != null && user.getRole() == UserRole.GUEST) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Guest accounts have read-only access");
+        }
+    }
+
+    private void ensureTargetUserIsNotAdmin(User user) {
+        if (user != null && user.getRole() == UserRole.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin accounts cannot be modified by admin actions");
         }
     }
 

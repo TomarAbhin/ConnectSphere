@@ -70,6 +70,15 @@ public class PostResource {
         return ResponseEntity.ok(postService.updatePost(authorization, postId, request));
     }
 
+    @PutMapping("/admin/{postId}")
+    public ResponseEntity<PostResponse> updatePostAsAdmin(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long postId,
+            @Valid @RequestBody UpdatePostRequest request
+    ) {
+        return ResponseEntity.ok(postService.updatePostAsAdmin(authorization, postId, request));
+    }
+
     @DeleteMapping("/{postId}")
     public ResponseEntity<Void> deletePost(
             @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,
@@ -103,6 +112,14 @@ public class PostResource {
             @RequestParam(name = "query", defaultValue = "") String query
     ) {
         return ResponseEntity.ok(postService.searchPosts(authorization, query));
+    }
+
+    @GetMapping("/admin/list")
+    public ResponseEntity<List<PostResponse>> searchPostsForAdmin(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam(name = "query", defaultValue = "") String query
+    ) {
+        return ResponseEntity.ok(postService.searchPostsForAdmin(authorization, query));
     }
 
     @PostMapping("/{postId}/likes")

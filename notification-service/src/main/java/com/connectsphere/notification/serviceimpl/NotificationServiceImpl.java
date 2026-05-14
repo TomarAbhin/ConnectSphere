@@ -4,7 +4,6 @@ import com.connectsphere.notification.dto.AuthProfileResponse;
 import com.connectsphere.notification.dto.BulkNotificationRequest;
 import com.connectsphere.notification.dto.CreateNotificationRequest;
 import com.connectsphere.notification.dto.NotificationResponse;
-import com.connectsphere.notification.dto.SendEmailRequest;
 import com.connectsphere.notification.dto.UnreadCountResponse;
 import com.connectsphere.notification.dto.UserResponse;
 import com.connectsphere.notification.entity.Notification;
@@ -12,7 +11,6 @@ import com.connectsphere.notification.entity.NotificationTargetType;
 import com.connectsphere.notification.entity.NotificationType;
 import com.connectsphere.notification.repository.NotificationRepository;
 import com.connectsphere.notification.service.NotificationService;
-import jakarta.mail.MessagingException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -23,9 +21,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
@@ -38,18 +33,15 @@ public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final RestTemplate restTemplate;
-    private final JavaMailSender mailSender;
     private final String authServiceUrl;
 
     public NotificationServiceImpl(
             NotificationRepository notificationRepository,
             RestTemplate restTemplate,
-            JavaMailSender mailSender,
             @Value("${app.services.auth-service.url:http://localhost:8081}") String authServiceUrl
     ) {
         this.notificationRepository = notificationRepository;
         this.restTemplate = restTemplate;
-        this.mailSender = mailSender;
         this.authServiceUrl = authServiceUrl;
     }
 
@@ -84,32 +76,8 @@ public class NotificationServiceImpl implements NotificationService {
                     request.message()
             );
             responses.add(response);
-            try {
-                sendEmailToUser(recipient.email(), "ConnectSphere Alert", request.message().trim());
-            } catch (RuntimeException ignored) {
-            }
         }
         return responses;
-    }
-
-    @Override
-    public NotificationResponse sendEmailAlert(String authorizationHeader, SendEmailRequest request) {
-        UserResponse recipient = fetchUserById(authorizationHeader, request.recipientId());
-        var sender = resolveCurrentProfile(authorizationHeader);
-        // allow user to send email to themselves or admins to send to anyone
-        if (!Objects.equals(sender.userId(), recipient.userId()) && !isAdmin(sender)) {
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not allowed to send email to this user");
-        }
-        Notification notification = new Notification();
-        notification.setRecipientId(recipient.userId());
-        notification.setActorId(sender.userId());
-        notification.setActionType(NotificationType.SYSTEM);
-        notification.setTargetType(NotificationTargetType.SYSTEM);
-        notification.setMessage(request.body().trim());
-        notification.setDeepLink(request.deepLink());
-        Notification saved = notificationRepository.save(notification);
-        sendEmailToUser(recipient.email(), request.subject().trim(), request.body().trim());
-        return toResponse(saved);
     }
 
     @Override
@@ -257,18 +225,6 @@ public class NotificationServiceImpl implements NotificationService {
             return user;
         } catch (RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
-        }
-    }
-
-    private void sendEmailToUser(String recipientEmail, String subject, String body) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(recipientEmail);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
-        } catch (MailException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unable to send email notification");
         }
     }
 

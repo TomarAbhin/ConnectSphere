@@ -53,13 +53,17 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public CommentResponse addComment(String authorizationHeader, AddCommentRequest request) {
-        Long authorId = resolveCurrentUserId(authorizationHeader);
+        AuthProfileResponse authorProfile = resolveCurrentProfile(authorizationHeader);
+        Long authorId = authorProfile.userId();
         ensurePostExists(authorizationHeader, request.postId());
         ensureParentCommentValid(request);
 
         Comment comment = new Comment();
         comment.setPostId(request.postId());
         comment.setAuthorId(authorId);
+        comment.setAuthorUsername(trimToNull(authorProfile.username()));
+        comment.setAuthorFullName(trimToNull(authorProfile.fullName()));
+        comment.setAuthorProfilePicUrl(trimToNull(authorProfile.profilePicUrl()));
         comment.setParentCommentId(request.parentCommentId());
         comment.setContent(request.content().trim());
 
@@ -290,10 +294,14 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private CommentResponse toResponse(Comment comment) {
+        AuthorSnapshot snapshot = resolveAuthorSnapshot(comment.getAuthorId(), comment.getAuthorUsername(), comment.getAuthorFullName(), comment.getAuthorProfilePicUrl());
         return new CommentResponse(
                 comment.getCommentId(),
                 comment.getPostId(),
                 comment.getAuthorId(),
+                snapshot.username(),
+                snapshot.fullName(),
+                snapshot.profilePicUrl(),
                 comment.getParentCommentId(),
                 comment.getContent(),
                 comment.getLikesCount(),
@@ -302,4 +310,47 @@ public class CommentServiceImpl implements CommentService {
                 comment.getUpdatedAt()
         );
     }
+
+    private AuthorSnapshot resolveAuthorSnapshot(Long authorId, String storedUsername, String storedFullName, String storedProfilePicUrl) {
+        String username = trimToNull(storedUsername);
+        String fullName = trimToNull(storedFullName);
+        String profilePicUrl = trimToNull(storedProfilePicUrl);
+
+        if ((username != null || fullName != null || profilePicUrl != null) || authorId == null) {
+            return new AuthorSnapshot(
+                    username != null ? username : defaultUsername(authorId),
+                    fullName,
+                    profilePicUrl
+            );
+        }
+
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> user = restTemplate.getForObject(authServiceUrl + "/auth/users/" + authorId, java.util.Map.class);
+            if (user != null) {
+                return new AuthorSnapshot(
+                        trimToNull((String) user.get("username")) != null ? trimToNull((String) user.get("username")) : defaultUsername(authorId),
+                        trimToNull((String) user.get("fullName")),
+                        trimToNull((String) user.get("profilePicUrl"))
+                );
+            }
+        } catch (RestClientException ignored) {
+        }
+
+        return new AuthorSnapshot(defaultUsername(authorId), null, null);
+    }
+
+    private String defaultUsername(Long authorId) {
+        return authorId == null ? "User" : "User #" + authorId;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record AuthorSnapshot(String username, String fullName, String profilePicUrl) {}
 }

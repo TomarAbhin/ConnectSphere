@@ -29,6 +29,10 @@ public interface MediaService {
 
     StoryResponse viewStory(Long storyId);
 
+    StoryResponse incrementStoryLikes(Long storyId);
+
+    StoryResponse decrementStoryLikes(Long storyId);
+
     void deleteStory(String authorizationHeader, Long storyId);
 
     int expireOldStories();

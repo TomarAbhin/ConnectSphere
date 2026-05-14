@@ -1,14 +1,15 @@
-# ── Build stage ──────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM maven:3.9.9-eclipse-temurin-21 AS builder
 WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-# Build without running tests (tests run in CI)
-RUN apk add --no-cache maven && mvn -f pom.xml package -DskipTests
 
-# ── Run stage ────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+COPY . .
+
+RUN mvn -pl media-service -am -DskipTests package
+
+FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=builder /app/target/media-service-*.jar app.jar
-EXPOSE 808$(echo media-service | grep -o '[0-9]' | head -1 || echo '0')
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+COPY --from=builder /app/media-service/target/media-service-*.jar app.jar
+
+EXPOSE 8087
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

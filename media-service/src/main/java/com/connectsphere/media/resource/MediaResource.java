@@ -6,13 +6,16 @@ import com.connectsphere.media.dto.MediaUploadResponse;
 import com.connectsphere.media.dto.StoryListResponse;
 import com.connectsphere.media.dto.StoryResponse;
 import com.connectsphere.media.dto.UploadMediaRequest;
+import com.connectsphere.media.MediaServiceApplication;
 import com.connectsphere.media.service.MediaService;
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.LinkedHashSet;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -30,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping
@@ -37,10 +41,16 @@ public class MediaResource {
 
     private final MediaService mediaService;
     private final ObjectMapper objectMapper;
+    private final String uploadDir;
 
-    public MediaResource(MediaService mediaService, ObjectMapper objectMapper) {
+    public MediaResource(
+            MediaService mediaService,
+            ObjectMapper objectMapper,
+            @Value("${app.media.upload-dir:uploads/media}") String uploadDir
+    ) {
         this.mediaService = mediaService;
         this.objectMapper = objectMapper;
+        this.uploadDir = uploadDir;
     }
 
     @PostMapping(path = "/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -79,9 +89,8 @@ public class MediaResource {
 
     @GetMapping("/media/files/{*filePath}")
     public ResponseEntity<Resource> downloadMedia(@PathVariable String filePath) throws IOException {
-        Path baseDir = Paths.get("uploads/media").toAbsolutePath().normalize();
-        Path resolved = baseDir.resolve(filePath).normalize();
-        if (!resolved.startsWith(baseDir) || !Files.exists(resolved)) {
+        Path resolved = locateMediaFile(filePath);
+        if (resolved == null) {
             return ResponseEntity.notFound().build();
         }
         Resource resource = new UrlResource(resolved.toUri());
@@ -89,6 +98,41 @@ public class MediaResource {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(resource);
+    }
+
+    private Path locateMediaFile(String filePath) {
+        String relativeFilePath = normalizeRelativePath(filePath);
+        for (Path anchor : candidateAnchors()) {
+            Path baseDir = anchor.resolve(uploadDir).toAbsolutePath().normalize();
+            Path resolved = baseDir.resolve(relativeFilePath).normalize();
+            if (resolved.startsWith(baseDir) && Files.exists(resolved)) {
+                return resolved;
+            }
+        }
+        return null;
+    }
+
+    private List<Path> candidateAnchors() {
+        LinkedHashSet<Path> anchors = new LinkedHashSet<>();
+        anchors.add(Paths.get("").toAbsolutePath().normalize());
+        try {
+            URI location = MediaServiceApplication.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+            Path codeSource = Paths.get(location).toAbsolutePath().normalize();
+            Path current = Files.isDirectory(codeSource) ? codeSource : codeSource.getParent();
+            while (current != null) {
+                anchors.add(current);
+                current = current.getParent();
+            }
+        } catch (Exception ignored) {
+        }
+        return List.copyOf(anchors);
+    }
+
+    private String normalizeRelativePath(String filePath) {
+        if (filePath == null) {
+            return "";
+        }
+        return filePath.replace('\\', '/').replaceFirst("^/+(?=.)", "");
     }
 
     @GetMapping("/media/post/{postId}")
@@ -139,6 +183,16 @@ public class MediaResource {
     @PutMapping("/stories/{storyId}/view")
     public ResponseEntity<StoryResponse> viewStory(@PathVariable Long storyId) {
         return ResponseEntity.ok(mediaService.viewStory(storyId));
+    }
+
+    @PostMapping("/stories/{storyId}/likes")
+    public ResponseEntity<StoryResponse> likeStory(@PathVariable Long storyId) {
+        return ResponseEntity.ok(mediaService.incrementStoryLikes(storyId));
+    }
+
+    @DeleteMapping("/stories/{storyId}/likes")
+    public ResponseEntity<StoryResponse> unlikeStory(@PathVariable Long storyId) {
+        return ResponseEntity.ok(mediaService.decrementStoryLikes(storyId));
     }
 
     @DeleteMapping("/stories/{storyId}")

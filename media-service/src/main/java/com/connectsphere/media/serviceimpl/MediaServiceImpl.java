@@ -138,10 +138,14 @@ public class MediaServiceImpl implements MediaService {
         AuthProfileResponse profile = resolveCurrentProfile(authorizationHeader);
         Story story = new Story();
         story.setAuthorId(profile.userId());
+        story.setAuthorUsername(trimToNull(profile.username()));
+        story.setAuthorFullName(trimToNull(profile.fullName()));
+        story.setAuthorProfilePicUrl(trimToNull(profile.profilePicUrl()));
         story.setMediaUrl(request.mediaUrl().trim());
         story.setCaption(request.caption() == null ? null : request.caption().trim());
         story.setMediaType(request.mediaType());
         story.setViewsCount(0L);
+        story.setLikesCount(0L);
         story.setActive(true);
         story.setExpiresAt(Instant.now().plusSeconds(24 * 60 * 60));
         return toStoryResponse(storyRepository.save(story));
@@ -176,6 +180,20 @@ public class MediaServiceImpl implements MediaService {
     public StoryResponse viewStory(Long storyId) {
         Story story = getActiveStory(storyId);
         story.setViewsCount(story.getViewsCount() + 1);
+        return toStoryResponse(storyRepository.save(story));
+    }
+
+    @Override
+    public StoryResponse incrementStoryLikes(Long storyId) {
+        Story story = getActiveStory(storyId);
+        story.setLikesCount(story.getLikesCount() + 1);
+        return toStoryResponse(storyRepository.save(story));
+    }
+
+    @Override
+    public StoryResponse decrementStoryLikes(Long storyId) {
+        Story story = getActiveStory(storyId);
+        story.setLikesCount(Math.max(0, story.getLikesCount() - 1));
         return toStoryResponse(storyRepository.save(story));
     }
 
@@ -282,7 +300,9 @@ public class MediaServiceImpl implements MediaService {
     private UserResponse fetchUserById(String authorizationHeader, Long userId) {
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", authorizationHeader);
+            if (authorizationHeader != null && !authorizationHeader.isBlank()) {
+                headers.set("Authorization", authorizationHeader);
+            }
             HttpEntity<Void> request = new HttpEntity<>(headers);
             UserResponse user = restTemplate.exchange(
                     authServiceUrl + "/auth/users/" + userId,
@@ -360,16 +380,45 @@ public class MediaServiceImpl implements MediaService {
     }
 
     private StoryResponse toStoryResponse(Story story) {
+        AuthorSnapshot snapshot = resolveStoryAuthorSnapshot(story.getAuthorId(), story.getAuthorUsername(), story.getAuthorFullName(), story.getAuthorProfilePicUrl());
         return new StoryResponse(
                 story.getStoryId(),
                 story.getAuthorId(),
+                snapshot.username(),
+                snapshot.fullName(),
+                snapshot.profilePicUrl(),
                 story.getMediaUrl(),
                 story.getCaption(),
                 story.getMediaType(),
                 story.getViewsCount(),
+                story.getLikesCount(),
                 story.getExpiresAt(),
                 story.getCreatedAt(),
                 story.isActive()
         );
     }
+
+    private AuthorSnapshot resolveStoryAuthorSnapshot(Long authorId, String username, String fullName, String profilePicUrl) {
+        if ((username != null && !username.isBlank()) || (fullName != null && !fullName.isBlank()) || (profilePicUrl != null && !profilePicUrl.isBlank())) {
+            return new AuthorSnapshot(username, fullName, profilePicUrl);
+        }
+        try {
+            UserResponse user = fetchUserById(null, authorId);
+            if (user != null) {
+                return new AuthorSnapshot(user.username(), user.fullName(), user.profilePicUrl());
+            }
+        } catch (Exception ignored) {
+        }
+        return new AuthorSnapshot("User " + authorId, null, null);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record AuthorSnapshot(String username, String fullName, String profilePicUrl) {}
 }

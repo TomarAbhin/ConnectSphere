@@ -3,7 +3,6 @@ package com.connectsphere.notification.resource;
 import com.connectsphere.notification.dto.BulkNotificationRequest;
 import com.connectsphere.notification.dto.CreateNotificationRequest;
 import com.connectsphere.notification.dto.NotificationResponse;
-import com.connectsphere.notification.dto.SendEmailRequest;
 import com.connectsphere.notification.dto.UnreadCountResponse;
 import com.connectsphere.notification.service.NotificationService;
 import jakarta.validation.Valid;
@@ -44,14 +43,6 @@ public class NotificationResource {
             @Valid @RequestBody BulkNotificationRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(notificationService.sendBulkNotification(authorization, request));
-    }
-
-    @PostMapping("/email")
-    public ResponseEntity<NotificationResponse> sendEmailAlert(
-            @RequestHeader(name = "Authorization", required = false) String authorization,
-            @Valid @RequestBody SendEmailRequest request
-    ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(notificationService.sendEmailAlert(authorization, request));
     }
 
     @GetMapping

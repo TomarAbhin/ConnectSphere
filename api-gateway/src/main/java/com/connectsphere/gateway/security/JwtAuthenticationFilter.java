@@ -31,6 +31,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             "/api/v1/media/files/",
             "/actuator/health",
             "/actuator/info",
+                "/api-docs",
             "/v3/api-docs",
             "/swagger-ui",
             "/swagger-ui.html"
