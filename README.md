@@ -1,150 +1,240 @@
 # ConnectSphere
 
-ConnectSphere is a Spring Boot microservices social platform with a React frontend. It includes user authentication, posts, comments, reactions, follows, notifications, media uploads, search, and an API gateway.
+ConnectSphere is a full-stack social platform built with Spring Boot microservices and a React frontend. The backend is split into independently owned services for authentication, posts, comments, reactions, follows, notifications, media, search, API routing, and service discovery.
 
-## Architecture
+## Project Structure
 
-The project is organized as a multi-module Maven workspace:
+```text
+connectsphere/
+  api-gateway/              Spring Cloud Gateway entry point
+  eureka-server/            Eureka service registry
+  auth-service/             Registration, login, JWT, profiles, admin users
+  post-service/             Posts, feeds, visibility, counters
+  comment-service/          Comments and replies
+  like-service/             Reactions for posts, comments, and stories
+  follow-service/           Follow graph, followers, following, suggestions
+  notification-service/     Notifications and content reports
+  media-service/            Media uploads and stories
+  search-service/           Post search, user search proxy, hashtags
+  connectsphere-frontend/   React client
+  docker/                   Local Docker support
+  docker-compose.yml        Full local stack
+  pom.xml                   Backend Maven multi-module build
+```
 
-- auth-service: registration, login, profiles, admin user management
-- post-service: create, edit, delete, feed, visibility, post counters
-- comment-service: threaded comments, replies, comment likes, moderation
-- like-service: reactions for posts and comments
-- follow-service: follows, followers, suggestions, mutuals
-- notification-service: in-app notifications and email alerts
-- media-service: uploads, file serving, and stories
-- search-service: post indexing, hashtag search, and trending tags
-- api-gateway: single entry point for the backend
-- eureka-server: service registry for discovery
-- connectsphere-frontend: React client UI
+Project diagrams live one level up in `../docs`:
+
+- `../docs/architecture-diagrams.md`
+- `../docs/er-diagrams.md`
+
+## Backend Services
+
+| Service | Port | Responsibility |
+| --- | ---: | --- |
+| api-gateway | 8080 | Routes `/api/v1/**` requests to backend services |
+| auth-service | 8081 | Auth, JWT, users, profiles, admin user operations |
+| post-service | 8082 | Posts, feed, visibility, post counters |
+| comment-service | 8083 | Comments, replies, comment counts |
+| like-service | 8084 | Likes and reaction summaries |
+| follow-service | 8085 | Follows, followers, following, suggestions |
+| notification-service | 8086 | Notifications and moderation reports |
+| media-service | 8087 | File uploads, media serving, stories |
+| search-service | 8088 | Search index, hashtags, user search proxy |
+| eureka-server | 8761 | Service registry |
+
+## Infrastructure
+
+Docker Compose starts:
+
+- MySQL on host port `3307`
+- Redis on `6379`
+- RabbitMQ on `5672`, management UI on `15672`
+- Elasticsearch on `9200`
+- Eureka on `8761`
+- API gateway on `8080`
+- Backend services on `8081` through `8088`
+
+Each service owns its own database schema. Cross-service links such as `authorId`, `postId`, `targetId`, and `recipientId` are logical API references, not shared database foreign keys.
 
 ## Requirements
 
 - Java 21
-- Maven 3.9+ if you want to run the backend outside Docker
-- Node.js 18+ if you want to run the frontend outside Docker
-- Docker Desktop if you want the containerized setup
+- Maven 3.9+ for local backend builds
+- Node.js 18+ or 20+ for local frontend work
+- Docker Desktop for the containerized stack
 
 ## Quick Start With Docker
 
-Docker is the easiest way to run the full stack.
-
-1. Install Docker Desktop for Windows from the official Docker website.
-2. Start Docker Desktop and make sure the engine is running.
-3. From the repository root, run:
+From this directory:
 
 ```powershell
-docker compose up -d
+docker compose up -d --build
 ```
 
-4. Open these URLs:
+Open:
 
-- Frontend: http://localhost:3000
-- API gateway: http://localhost:8080
-- Eureka server: http://localhost:8761
-- RabbitMQ management: http://localhost:15672
+- API gateway: `http://localhost:8080`
+- Eureka dashboard: `http://localhost:8761`
+- RabbitMQ management: `http://localhost:15672` with `guest` / `guest`
 
-5. Stop the stack with:
+The frontend service is behind the `frontend` Compose profile. To include it:
+
+```powershell
+docker compose --profile frontend up -d --build
+```
+
+Then open:
+
+- Frontend: `http://localhost:3000`
+
+Stop everything:
 
 ```powershell
 docker compose down
 ```
 
-## Local Development Without Docker
+## Local Backend Development
 
-If you prefer running services directly on your machine, start them in this order:
-
-1. Eureka server on port 8761
-2. MySQL, Redis, RabbitMQ, and Elasticsearch
-3. auth-service
-4. post-service
-5. comment-service
-6. like-service
-7. follow-service
-8. notification-service
-9. media-service
-10. search-service
-11. api-gateway
-12. Frontend on port 3000
-
-Each backend service has its own Maven module and Dockerfile under its module directory.
-
-### Backend
-
-From the repository root, you can build all backend modules with:
+Start infrastructure first, either through Docker Compose or local installs:
 
 ```powershell
-mvn clean package -DskipTests
+docker compose up -d mysql redis rabbitmq elasticsearch eureka-server
 ```
 
-To run a specific module during development, use the module directory and run its Spring Boot app with your IDE or Maven.
-
-### Frontend
-
-From the frontend directory:
+Build all backend modules:
 
 ```powershell
+mvn clean package
+```
+
+Run one service from its module directory:
+
+```powershell
+mvn spring-boot:run
+```
+
+Recommended startup order for all services outside Docker:
+
+1. `eureka-server`
+2. MySQL, Redis, RabbitMQ, Elasticsearch
+3. `auth-service`
+4. `post-service`
+5. `comment-service`
+6. `like-service`
+7. `follow-service`
+8. `notification-service`
+9. `media-service`
+10. `search-service`
+11. `api-gateway`
+
+## Frontend Development
+
+The frontend lives in `connectsphere-frontend`.
+
+```powershell
+cd connectsphere-frontend
 npm install
 npm run dev
 ```
 
-The frontend runs on http://localhost:3000.
+The Vite dev server runs on `http://localhost:3000` and calls the gateway at:
 
-## Testing
-
-### Frontend tests
-
-From the frontend directory:
-
-```powershell
-npm run test:run
+```text
+http://localhost:8080/api/v1
 ```
 
-### Backend tests
+See `connectsphere-frontend/README.md` for frontend-specific details.
 
-Run backend tests from the repository root when Maven is available:
+## Useful Commands
+
+Build backend:
+
+```powershell
+mvn clean package
+```
+
+Run backend tests:
 
 ```powershell
 mvn test
 ```
 
-## Service Ports
+Build one Docker service:
 
-- 8761: Eureka server
-- 8080: API gateway
-- 8081: auth-service
-- 8082: post-service
-- 8083: comment-service
-- 8084: like-service
-- 8085: follow-service
-- 8086: notification-service
-- 8087: media-service
-- 8088: search-service
-- 3000: frontend
+```powershell
+docker compose build auth-service
+```
 
-## Features
+Restart one Docker service after changes:
 
-- User authentication and profile management
-- Admin moderation for users and posts
-- Social feed, post creation, and post editing
+```powershell
+docker compose up -d --build --no-deps auth-service
+```
+
+View logs:
+
+```powershell
+docker compose logs -f auth-service
+```
+
+Frontend tests:
+
+```powershell
+cd connectsphere-frontend
+npm run test:run
+```
+
+Frontend production build:
+
+```powershell
+cd connectsphere-frontend
+npm run build
+```
+
+## API Routing
+
+The frontend should call the API gateway, not individual backend services.
+
+| Gateway path | Routed service |
+| --- | --- |
+| `/api/v1/auth/**` | auth-service |
+| `/api/v1/posts/**` | post-service |
+| `/api/v1/comments/**` | comment-service |
+| `/api/v1/likes/**` | like-service |
+| `/api/v1/follows/**` | follow-service |
+| `/api/v1/notifications/**` | notification-service |
+| `/api/v1/reports/**` | notification-service |
+| `/api/v1/media/**` | media-service |
+| `/api/v1/stories/**` | media-service |
+| `/api/v1/search/**` | search-service |
+
+## Key Features
+
+- User registration, login, JWT refresh, logout
+- Profile editing and user lookup
+- Public, followers-only, and private posts
+- Feed generation from public posts and follow graph
 - Threaded comments and replies
-- Post and comment reactions
-- Follow graph and suggested users
-- Notifications and email alerts
-- Media uploads and story support
-- Search, hashtag indexing, and trending tags
-- Dockerized local development stack
-- Eureka service discovery
-
-## Notes
-
-- The backend services are configured to register with Eureka.
-- The Docker Compose file starts the registry and supporting infrastructure before the microservices.
-- The frontend currently uses the API gateway for most requests.
+- Reactions for posts, comments, and stories
+- Follow/unfollow, follower lists, following lists, mutuals, suggestions
+- Notifications for social actions
+- Media uploads and 24-hour stories
+- Search for posts, users, hashtags, and trending tags
+- Admin pages for users, posts, reports, and analytics
+- Dockerized local development
 
 ## Troubleshooting
 
-- If a backend service cannot connect to MySQL, check that Docker is running and the database container is healthy.
-- If services do not appear in Eureka, confirm that port 8761 is reachable and the services are using the correct registry URL.
-- If the frontend cannot reach the backend, make sure the API gateway is running on port 8080.
+If services cannot talk to each other in Docker, confirm the environment URLs in `docker-compose.yml` use Compose service names such as `http://auth-service:8081`, not `localhost`.
 
+If the frontend returns `401` after backend fixes, clear the old browser session or log out and log in again.
+
+If MySQL connection fails, wait for the `cs-mysql` container to become healthy and then restart the affected service.
+
+If a service does not show up in Eureka, check its logs and verify `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE`.
+
+If search endpoints fail, check both `search-service` and Elasticsearch health:
+
+```powershell
+docker compose ps search-service elasticsearch
+```
