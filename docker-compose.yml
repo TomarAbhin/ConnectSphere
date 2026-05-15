@@ -1,5 +1,3 @@
-version: '3.9'
-
 # ─────────────────────────────────────────────────────────────────
 # ConnectSphere – Local Development Docker Compose
 # Start everything:  docker-compose up -d
@@ -87,6 +85,76 @@ services:
       timeout: 10s
       retries: 5
 
+  # -- Code quality ---------------------------------------------------------
+  # Optional local SonarQube stack. It is behind profiles so the normal
+  # application stack and existing service images are not affected.
+
+  sonar-db:
+    image: postgres:16-alpine
+    profiles:
+      - quality
+    container_name: cs-sonar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sonarqube
+      POSTGRES_USER: sonarqube
+      POSTGRES_PASSWORD: sonarqube
+    volumes:
+      - sonarqube-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonarqube -d sonarqube"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sonarqube:
+    image: sonarqube:26.5.0.122743-community
+    profiles:
+      - quality
+    container_name: cs-sonarqube
+    restart: unless-stopped
+    depends_on:
+      sonar-db:
+        condition: service_healthy
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonarqube
+      SONAR_JDBC_PASSWORD: sonarqube
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-extensions:/opt/sonarqube/extensions
+      - sonarqube-logs:/opt/sonarqube/logs
+    stop_grace_period: 1h
+
+  sonar-scanner:
+    image: sonarsource/sonar-scanner-cli:latest
+    profiles:
+      - quality-scan
+    container_name: cs-sonar-scanner
+    depends_on:
+      - sonarqube
+    environment:
+      SONAR_HOST_URL: http://sonarqube:9000
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+      SONAR_SCANNER_JAVA_OPTS: -Xmx1024m
+    volumes:
+      - .:/usr/src
+      - sonar-scanner-cache:/opt/sonar-scanner/.sonar
+
+  sonar-coverage:
+    image: maven:3.9.9-eclipse-temurin-21
+    profiles:
+      - quality-coverage
+    container_name: cs-sonar-coverage
+    working_dir: /workspace
+    command: mvn clean verify -Pcoverage
+    volumes:
+      - .:/workspace
+      - maven-repo:/root/.m2
+
   # ── Microservices ────────────────────────────────────────────────
 
   auth-service:
@@ -99,11 +167,13 @@ services:
       - "8081:8081"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_auth_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_POST_URL: http://post-service:8082
+      APP_SERVICES_SEARCH_URL: http://search-service:8088
     depends_on:
       eureka-server:
         condition: service_started
@@ -124,11 +194,14 @@ services:
       - "8082:8082"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_post_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_post_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
+      APP_SERVICES_FOLLOW_SERVICE_URL: http://follow-service:8085
+      APP_SERVICES_SEARCH_SERVICE_URL: http://search-service:8088
     depends_on:
       - eureka-server
       - mysql
@@ -146,10 +219,12 @@ services:
       - "8083:8083"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_comment_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_comment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
+      APP_SERVICES_POST_SERVICE_URL: http://post-service:8082
     depends_on:
       - eureka-server
       - mysql
@@ -166,10 +241,14 @@ services:
       - "8084:8084"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_like_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_like_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
+      APP_SERVICES_POST_SERVICE_URL: http://post-service:8082
+      APP_SERVICES_COMMENT_SERVICE_URL: http://comment-service:8083
+      APP_SERVICES_MEDIA_SERVICE_URL: http://media-service:8087
     depends_on:
       - eureka-server
       - mysql
@@ -188,11 +267,13 @@ services:
       - "8085:8085"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_follow_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_follow_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
+      APP_SERVICES_NOTIFICATION_SERVICE_URL: http://notification-service:8086
     depends_on:
       - eureka-server
       - mysql
@@ -209,11 +290,12 @@ services:
       - "8086:8086"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_notification_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_notification_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
     depends_on:
       - eureka-server
       - mysql
@@ -230,10 +312,11 @@ services:
       - "8087:8087"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_media_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_media_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
     depends_on:
       - eureka-server
       - mysql
@@ -249,11 +332,14 @@ services:
       - "8088:8088"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_search_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_search_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
+      APP_SERVICES_FOLLOW_SERVICE_URL: http://follow-service:8085
+      APP_SERVICES_POST_SERVICE_URL: http://post-service:8082
     depends_on:
       - eureka-server
       - mysql
@@ -270,6 +356,14 @@ services:
       - "8080:8080"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      APP_SERVICES_AUTH_URL: http://auth-service:8081
+      APP_SERVICES_POST_URL: http://post-service:8082
+      APP_SERVICES_COMMENT_URL: http://comment-service:8083
+      APP_SERVICES_LIKE_URL: http://like-service:8084
+      APP_SERVICES_FOLLOW_URL: http://follow-service:8085
+      APP_SERVICES_NOTIFICATION_URL: http://notification-service:8086
+      APP_SERVICES_MEDIA_URL: http://media-service:8087
+      APP_SERVICES_SEARCH_URL: http://search-service:8088
     depends_on:
       - eureka-server
       - auth-service
@@ -285,6 +379,8 @@ services:
     build:
       context: ./connectsphere-frontend
       dockerfile: Dockerfile
+    profiles:
+      - frontend
     container_name: cs-frontend
     restart: unless-stopped
     ports:
@@ -295,3 +391,9 @@ services:
 volumes:
   mysql-data:
   es-data:
+  sonarqube-db-data:
+  sonarqube-data:
+  sonarqube-extensions:
+  sonarqube-logs:
+  sonar-scanner-cache:
+  maven-repo:

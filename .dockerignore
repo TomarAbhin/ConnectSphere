@@ -4,5 +4,7 @@
 **/node_modules
 connectsphere-frontend/dist
 connectsphere-frontend/screenshots
+**/coverage
+**/.scannerwork
 uploads
 **/*.log
