@@ -93,6 +93,44 @@ Stop everything:
 docker compose down
 ```
 
+## Local SonarQube Analysis
+
+SonarQube is optional and runs behind Docker Compose profiles, so the normal app stack and existing service images are unchanged.
+
+Start SonarQube and its PostgreSQL database:
+
+```powershell
+docker compose --profile quality up -d sonar-db sonarqube
+```
+
+Open `http://localhost:9000`, sign in with `admin` / `admin`, change the password, then create a user token from SonarQube.
+
+Generate backend coverage and compiled Java bytecode for analysis. Use the Docker command if Maven is not installed locally:
+
+```powershell
+mvn clean verify -Pcoverage
+```
+
+```powershell
+docker compose --profile quality-coverage run --rm sonar-coverage
+```
+The coverage command writes each service's JaCoCo XML report under `target/site/jacoco/jacoco.xml`; run the scanner after this step so SonarQube can import the reports.
+
+Run the scanner in Docker, replacing the token value:
+
+```powershell
+$env:SONAR_TOKEN = "your-sonarqube-token"
+docker compose --profile quality --profile quality-scan run --rm sonar-scanner
+```
+
+Stop only the SonarQube containers when finished:
+
+```powershell
+docker compose stop sonarqube sonar-db
+```
+
+Avoid `docker compose down -v` unless you intentionally want to remove SonarQube data and the existing application volumes.
+
 ## Local Backend Development
 
 Start infrastructure first, either through Docker Compose or local installs:

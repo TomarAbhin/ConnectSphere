@@ -1,0 +1,30 @@
+# Maven
+target/
+*.jar
+*.war
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.classpath
+*.project
+*.settings/
+
+# Node
+**/node_modules/
+**/coverage/
+
+# SonarQube / scanners
+**/.scannerwork/
+.sonar/
+
+# Env / Secrets
+**/application-prod.properties
+**/*.env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
