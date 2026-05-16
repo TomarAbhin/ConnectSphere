@@ -4,17 +4,13 @@ services:
     runtime: docker
     dockerContext: ./connectsphere
     dockerfilePath: ./connectsphere/Dockerfile.render
-    plan: starter
+    plan: free
     healthCheckPath: /actuator/health
-    disk:
-      name: media-uploads
-      mountPath: /app/uploads/media
-      sizeGB: 1
     envVars:
       - key: PORT
         value: 8080
       - key: JAVA_TOOL_OPTIONS
-        value: -XX:MaxRAMPercentage=70
+        value: -Xms16m -Xmx64m -XX:MaxMetaspaceSize=96m
       - key: CORS_ALLOWED_ORIGINS
         value: https://your-vercel-app.vercel.app
       - key: JWT_SECRET
