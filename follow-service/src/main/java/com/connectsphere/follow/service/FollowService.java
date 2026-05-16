@@ -25,4 +25,6 @@ public interface FollowService {
     List<FollowerResponse> getMutualFollows(String authorizationHeader, Long userId);
 
     List<SuggestedUserResponse> getSuggestedUsers(String authorizationHeader);
+
+    List<Long> getFollowingIds(String authorizationHeader, Long userId);
 }

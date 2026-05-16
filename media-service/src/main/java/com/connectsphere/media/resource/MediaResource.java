@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -97,7 +98,11 @@ public class MediaResource {
         if (!resource.exists() || !resource.isReadable()) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(resource);
+        MediaType mediaType = MediaTypeFactory.getMediaType(resource)
+                .orElse(MediaType.APPLICATION_OCTET_STREAM);
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .body(resource);
     }
 
     private Path locateMediaFile(String filePath) {

@@ -158,7 +158,7 @@ public class PostServiceImpl implements PostService {
         if (post == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found");
         }
-        if (!canViewPost(post, requesterId)) {
+        if (!canViewPost(post, requesterId, authorizationHeader)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to this post");
         }
         return toResponse(post);
@@ -172,7 +172,7 @@ public class PostServiceImpl implements PostService {
                 .stream()
                 .map(this::refreshAuthorSnapshotOrDelete)
                 .filter(Objects::nonNull)
-                .filter(post -> canViewPost(post, requesterId))
+                .filter(post -> canViewPost(post, requesterId, authorizationHeader))
                 .map(this::toResponse)
                 .toList();
     }
@@ -191,7 +191,7 @@ public class PostServiceImpl implements PostService {
                     .toList();
         }
 
-        Set<Long> followingIds = new LinkedHashSet<>(fetchFollowingIds(requesterId));
+        Set<Long> followingIds = new LinkedHashSet<>(fetchFollowingIds(requesterId, authorizationHeader));
 
         List<Post> feedPosts = new ArrayList<>();
         if (!followingIds.isEmpty()) {
@@ -320,7 +320,7 @@ public class PostServiceImpl implements PostService {
                     .stream()
                     .map(this::refreshAuthorSnapshotOrDelete)
                     .filter(Objects::nonNull)
-                    .filter(post -> canViewPost(post, requesterId))
+                    .filter(post -> canViewPost(post, requesterId, authorizationHeader))
                     .map(this::toResponse)
                     .toList();
         }
@@ -328,7 +328,7 @@ public class PostServiceImpl implements PostService {
                 .stream()
                 .map(this::refreshAuthorSnapshotOrDelete)
                 .filter(Objects::nonNull)
-                .filter(post -> canViewPost(post, requesterId))
+                .filter(post -> canViewPost(post, requesterId, authorizationHeader))
                 .map(this::toResponse)
                 .toList();
     }
@@ -408,7 +408,7 @@ public class PostServiceImpl implements PostService {
         return post.getVisibility() == PostVisibility.PUBLIC || post.getVisibility() == PostVisibility.FOLLOWERS_ONLY;
     }
 
-    private boolean canViewPost(Post post, Long requesterId) {
+    private boolean canViewPost(Post post, Long requesterId, String authorizationHeader) {
         if (Objects.equals(post.getAuthorId(), requesterId)) {
             return true;
         }
@@ -421,7 +421,7 @@ public class PostServiceImpl implements PostService {
         if (post.getVisibility() == PostVisibility.PRIVATE) {
             return false;
         }
-        return fetchFollowingIds(post.getAuthorId()).contains(requesterId);
+        return fetchFollowingIds(requesterId, authorizationHeader).contains(post.getAuthorId());
     }
 
     private boolean matchesAdminQuery(Post post, String query) {
@@ -648,10 +648,15 @@ public class PostServiceImpl implements PostService {
         }
     }
 
-    private List<Long> fetchFollowingIds(Long userId) {
+    private List<Long> fetchFollowingIds(Long userId, String authorizationHeader) {
         try {
             String url = followServiceUrl + followServicePath.replace("{userId}", String.valueOf(userId));
-            Long[] result = restTemplate.getForObject(url, Long[].class);
+            HttpHeaders headers = new HttpHeaders();
+            if (authorizationHeader != null && !authorizationHeader.isBlank()) {
+                headers.set("Authorization", authorizationHeader);
+            }
+            HttpEntity<Void> request = new HttpEntity<>(headers);
+            Long[] result = restTemplate.exchange(url, HttpMethod.GET, request, Long[].class).getBody();
             if (result == null) {
                 return List.of();
             }
