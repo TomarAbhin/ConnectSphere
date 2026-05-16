@@ -22,11 +22,6 @@ connectsphere/
   pom.xml                   Backend Maven multi-module build
 ```
 
-Project diagrams live one level up in `../docs`:
-
-- `../docs/architecture-diagrams.md`
-- `../docs/er-diagrams.md`
-
 ## Backend Services
 
 | Service | Port | Responsibility |
