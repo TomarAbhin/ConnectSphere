@@ -146,6 +146,32 @@ class PostServiceImplTest {
     }
 
     @Test
+    void getPostByIdAllowsFollowersOnlyPostForFollower() {
+        Post followersPost = post(13L, 2L, PostVisibility.FOLLOWERS_ONLY);
+        when(postRepository.findByPostIdAndIsDeletedFalse(13L)).thenReturn(Optional.of(followersPost));
+        when(restTemplate.getForObject("http://auth/auth/users/2", Map.class))
+                .thenReturn(Map.of("username", " owner "));
+        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(restTemplate.exchange(
+                eq("http://auth/auth/profile"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(AuthProfileResponse.class)
+        )).thenReturn(new ResponseEntity<>(profile(9L, "viewer", "USER"), HttpStatus.OK));
+        when(restTemplate.exchange(
+                eq("http://follow/follows/9/following-ids"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Long[].class)
+        )).thenReturn(new ResponseEntity<>(new Long[]{2L}, HttpStatus.OK));
+
+        var response = postService.getPostById("Bearer token", 13L);
+
+        assertEquals(13L, response.postId());
+        assertEquals(PostVisibility.FOLLOWERS_ONLY, response.visibility());
+    }
+
+    @Test
     void feedForUserMergesFollowedOwnAndPublicPosts() {
         when(restTemplate.exchange(
                 eq("http://auth/auth/profile"),
@@ -153,8 +179,12 @@ class PostServiceImplTest {
                 any(HttpEntity.class),
                 eq(AuthProfileResponse.class)
         )).thenReturn(new ResponseEntity<>(profile(5L, "me", "USER"), HttpStatus.OK));
-        when(restTemplate.getForObject("http://follow/follows/5/following-ids", Long[].class))
-                .thenReturn(new Long[]{2L});
+        when(restTemplate.exchange(
+                eq("http://follow/follows/5/following-ids"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Long[].class)
+        )).thenReturn(new ResponseEntity<>(new Long[]{2L}, HttpStatus.OK));
         Post followed = post(1L, 2L, PostVisibility.FOLLOWERS_ONLY);
         Post own = post(2L, 5L, PostVisibility.PRIVATE);
         Post publicPost = post(3L, 8L, PostVisibility.PUBLIC);

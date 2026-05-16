@@ -130,6 +130,15 @@ public class FollowServiceImpl implements FollowService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Long> getFollowingIds(String authorizationHeader, Long userId) {
+        return followRepository.findByFollowerIdAndStatusOrderByCreatedAtDesc(userId, FollowStatus.ACTIVE)
+                .stream()
+                .map(Follow::getFollowedId)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public FollowCountResponse getCounts(String authorizationHeader, Long userId) {
         long followerCount = followRepository.countByFollowedIdAndStatus(userId, FollowStatus.ACTIVE);
         long followingCount = followRepository.countByFollowerIdAndStatus(userId, FollowStatus.ACTIVE);

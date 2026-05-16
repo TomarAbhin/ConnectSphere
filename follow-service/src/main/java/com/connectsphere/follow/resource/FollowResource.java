@@ -69,6 +69,14 @@ public class FollowResource {
         return ResponseEntity.ok(followService.getFollowing(authorization, userId));
     }
 
+    @GetMapping("/{userId}/following-ids")
+    public ResponseEntity<List<Long>> getFollowingIds(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable Long userId
+    ) {
+        return ResponseEntity.ok(followService.getFollowingIds(authorization, userId));
+    }
+
     @GetMapping("/{userId}/counts")
     public ResponseEntity<FollowCountResponse> getCounts(
             @RequestHeader(name = "Authorization", required = false) String authorization,

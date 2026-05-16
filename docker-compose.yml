@@ -321,6 +321,8 @@ services:
       - eureka-server
       - mysql
       - rabbitmq
+    volumes:
+      - ./media-service/uploads/media:/app/uploads/media
 
   search-service:
     build:

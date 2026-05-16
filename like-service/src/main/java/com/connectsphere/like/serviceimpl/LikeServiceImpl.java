@@ -262,15 +262,15 @@ public class LikeServiceImpl implements LikeService {
             headers.set("Authorization", authorizationHeader);
             HttpEntity<Void> request = new HttpEntity<>(headers);
             if (targetType == TargetType.POST) {
-                String path = increment ? "/posts/" + targetId + "/likes" : "/posts/" + targetId + "/likes";
+                String path = "/posts/" + targetId + "/likes";
                 HttpMethod method = increment ? HttpMethod.POST : HttpMethod.DELETE;
                 restTemplate.exchange(postServiceUrl + path, method, request, String.class);
             } else if (targetType == TargetType.COMMENT) {
-                String path = increment ? "/comments/" + targetId + "/likes" : "/comments/" + targetId + "/likes";
+                String path = "/comments/" + targetId + "/likes";
                 HttpMethod method = increment ? HttpMethod.POST : HttpMethod.DELETE;
                 restTemplate.exchange(commentServiceUrl + path, method, request, String.class);
             } else {
-                String path = increment ? "/stories/" + targetId + "/likes" : "/stories/" + targetId + "/likes";
+                String path = "/stories/" + targetId + "/likes";
                 HttpMethod method = increment ? HttpMethod.POST : HttpMethod.DELETE;
                 restTemplate.exchange(mediaServiceUrl + path, method, request, String.class);
             }
