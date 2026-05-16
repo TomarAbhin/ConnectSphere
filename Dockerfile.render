@@ -1,0 +1,26 @@
+FROM maven:3.9.9-eclipse-temurin-21 AS builder
+WORKDIR /workspace
+
+COPY . .
+RUN mvn -DskipTests package
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+COPY --from=builder /workspace/eureka-server/target/eureka-server-*.jar /app/services/eureka-server.jar
+COPY --from=builder /workspace/auth-service/target/auth-service-*.jar /app/services/auth-service.jar
+COPY --from=builder /workspace/post-service/target/post-service-*.jar /app/services/post-service.jar
+COPY --from=builder /workspace/comment-service/target/comment-service-*.jar /app/services/comment-service.jar
+COPY --from=builder /workspace/like-service/target/like-service-*.jar /app/services/like-service.jar
+COPY --from=builder /workspace/follow-service/target/follow-service-*.jar /app/services/follow-service.jar
+COPY --from=builder /workspace/notification-service/target/notification-service-*.jar /app/services/notification-service.jar
+COPY --from=builder /workspace/media-service/target/media-service-*.jar /app/services/media-service.jar
+COPY --from=builder /workspace/search-service/target/search-service-*.jar /app/services/search-service.jar
+COPY --from=builder /workspace/api-gateway/target/api-gateway-*.jar /app/services/api-gateway.jar
+COPY scripts/render-start.sh /app/render-start.sh
+
+RUN chmod +x /app/render-start.sh && mkdir -p /app/uploads/media
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/render-start.sh"]
