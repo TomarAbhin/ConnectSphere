@@ -147,7 +147,7 @@ public class MediaServiceImpl implements MediaService {
         story.setViewsCount(0L);
         story.setLikesCount(0L);
         story.setActive(true);
-        story.setExpiresAt(Instant.now().plusSeconds(24 * 60 * 60));
+        story.setExpiresAt(Instant.now().plusSeconds(24L * 60 * 60));
         return toStoryResponse(storyRepository.save(story));
     }
 
