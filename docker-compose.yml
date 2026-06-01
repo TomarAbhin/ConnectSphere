@@ -249,6 +249,7 @@ services:
       APP_SERVICES_POST_SERVICE_URL: http://post-service:8082
       APP_SERVICES_COMMENT_SERVICE_URL: http://comment-service:8083
       APP_SERVICES_MEDIA_SERVICE_URL: http://media-service:8087
+      APP_SERVICES_NOTIFICATION_SERVICE_URL: http://notification-service:8086
     depends_on:
       - eureka-server
       - mysql

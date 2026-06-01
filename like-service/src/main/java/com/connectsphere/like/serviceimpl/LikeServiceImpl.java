@@ -14,6 +14,8 @@ import com.connectsphere.like.repository.LikeRepository;
 import com.connectsphere.like.service.LikeService;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +30,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @Transactional
 public class LikeServiceImpl implements LikeService {
+
+    private static final Logger log = LoggerFactory.getLogger(LikeServiceImpl.class);
 
     private final LikeRepository likeRepository;
     private final RestTemplate restTemplate;
@@ -115,7 +119,9 @@ public class LikeServiceImpl implements LikeService {
                 org.springframework.http.HttpEntity<java.util.Map<String, Object>> req = new org.springframework.http.HttpEntity<>(payload, headers);
                 restTemplate.postForObject(notificationServiceUrl + "/notifications", req, java.util.Map.class);
             }
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn("Failed to create notification for {} {} {}: {}",
+                    request.targetType(), request.targetId(), userId, ex.getMessage());
         }
         return toResponse(saved);
     }
